@@ -7,7 +7,7 @@ import os
 from datetime import datetime, time, timedelta
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -16,10 +16,19 @@ import config
 from auth import current_user, login_user, register_user
 from database import get_cursor, init_pool
 from gemini import analyze_food_image
+from ratelimit import RateLimiter, client_ip
 
 app = FastAPI(title="飲控 App")
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
+
+# per-IP 速率限制:擋邀請碼/密碼暴力嘗試
+register_limiter = RateLimiter(
+    config.REG_MAX_FAILURES, config.REG_WINDOW_S, config.REG_BLOCK_S
+)
+login_limiter = RateLimiter(
+    config.LOGIN_MAX_FAILURES, config.LOGIN_WINDOW_S, config.LOGIN_BLOCK_S
+)
 
 
 @app.on_event("startup")
@@ -72,13 +81,32 @@ def _taipei_day_bounds(date_str: Optional[str]) -> tuple[datetime, datetime, str
 # 認證
 # ========================================================================
 @app.post("/api/auth/register")
-def api_register(body: RegisterIn):
-    return register_user(body.username, body.password, body.invite_code)
+def api_register(body: RegisterIn, request: Request):
+    ip = client_ip(request)
+    register_limiter.check(ip)  # 已被鎖就直接 429
+    try:
+        result = register_user(body.username, body.password, body.invite_code)
+    except HTTPException as e:
+        # 只有「邀請碼錯」才算暴力嘗試,計一次失敗
+        if e.status_code == 403:
+            register_limiter.record_failure(ip)
+        raise
+    register_limiter.reset(ip)  # 成功註冊,清掉該 IP 的失敗計數
+    return result
 
 
 @app.post("/api/auth/login")
-def api_login(body: LoginIn):
-    return login_user(body.username, body.password)
+def api_login(body: LoginIn, request: Request):
+    ip = client_ip(request)
+    login_limiter.check(ip)
+    try:
+        result = login_user(body.username, body.password)
+    except HTTPException as e:
+        if e.status_code == 401:  # 帳密錯誤
+            login_limiter.record_failure(ip)
+        raise
+    login_limiter.reset(ip)
+    return result
 
 
 @app.get("/api/auth/me")
