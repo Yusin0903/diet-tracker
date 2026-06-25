@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0f14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <title>飲控</title>
+</head>
+<body>
+  <!-- 登入 / 註冊 -->
+  <div id="auth-screen" class="screen">
+    <div class="auth-card">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1>飲控</h1>
+      </div>
+      <p class="brand-sub">快速記錄 · 對照每日目標</p>
+
+      <div class="tabs" id="auth-tabs">
+        <button class="tab active" data-mode="login">登入</button>
+        <button class="tab" data-mode="register">註冊</button>
+      </div>
+
+      <form id="auth-form" autocomplete="off">
+        <label class="field">
+          <span>帳號</span>
+          <input id="f-username" type="text" required minlength="2" placeholder="你的帳號" />
+        </label>
+        <label class="field">
+          <span>密碼</span>
+          <input id="f-password" type="password" required minlength="6" placeholder="至少 6 個字" />
+        </label>
+        <label class="field invite-field" id="invite-field" hidden>
+          <span>邀請碼</span>
+          <input id="f-invite" type="text" placeholder="沒有邀請碼無法註冊" />
+        </label>
+        <button type="submit" class="btn-primary" id="auth-submit">登入</button>
+        <p class="auth-error" id="auth-error"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主畫面 -->
+  <div id="app-screen" class="screen" hidden>
+    <header class="topbar">
+      <div class="brand small">
+        <span class="brand-dot"></span>
+        <span>飲控</span>
+      </div>
+      <div class="topbar-right">
+        <span id="who" class="who"></span>
+        <button id="logout" class="ghost-btn" title="登出">登出</button>
+      </div>
+    </header>
+
+    <!-- HERO:兩個進度 -->
+    <section class="hero">
+      <div class="ring-card" id="cal-card">
+        <svg class="ring" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="52" />
+          <circle class="ring-fg" id="cal-arc" cx="60" cy="60" r="52" />
+        </svg>
+        <div class="ring-center">
+          <div class="ring-value" id="cal-value">0</div>
+          <div class="ring-unit">kcal</div>
+        </div>
+        <div class="ring-foot">
+          <span class="ring-label">熱量</span>
+          <span class="ring-note" id="cal-note">—</span>
+        </div>
+      </div>
+
+      <div class="ring-card" id="pro-card">
+        <svg class="ring" viewBox="0 0 120 120">
+          <circle class="ring-bg" cx="60" cy="60" r="52" />
+          <circle class="ring-fg" id="pro-arc" cx="60" cy="60" r="52" />
+        </svg>
+        <div class="ring-center">
+          <div class="ring-value" id="pro-value">0</div>
+          <div class="ring-unit">g 蛋白</div>
+        </div>
+        <div class="ring-foot">
+          <span class="ring-label">蛋白質</span>
+          <span class="ring-note" id="pro-note">—</span>
+        </div>
+      </div>
+    </section>
+
+    <div id="protein-alert" class="alert" hidden></div>
+
+    <!-- 記錄入口 -->
+    <section class="actions">
+      <button class="action" id="act-photo">
+        <span class="action-icon">📷</span><span>拍照辨識</span>
+      </button>
+      <button class="action" id="act-manual">
+        <span class="action-icon">✏️</span><span>手動輸入</span>
+      </button>
+      <button class="action" id="act-fav">
+        <span class="action-icon">⭐</span><span>常用食物</span>
+      </button>
+    </section>
+    <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+
+    <!-- 今日記錄 -->
+    <section class="list-section">
+      <div class="list-head">
+        <h2>今天</h2>
+        <span class="list-date" id="today-date"></span>
+      </div>
+      <ul id="entry-list" class="entry-list"></ul>
+      <p id="empty-hint" class="empty-hint" hidden>還沒有記錄,從上面三個入口開始吧。</p>
+    </section>
+  </div>
+
+  <!-- 通用 modal -->
+  <div id="modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-title">記錄</h3>
+        <button class="ghost-btn" id="modal-close">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
