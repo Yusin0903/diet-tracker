@@ -17,6 +17,9 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* hidden 屬性必須蓋過下面任何 display 規則(否則 overlay 會一直擋住點擊) */
+[hidden] { display: none !important; }
+
 html, body {
   background: var(--bg);
   color: var(--text);
@@ -95,39 +98,83 @@ body {
 }
 .ghost-btn:hover { color: var(--text); border-color: var(--text-dim); }
 
-/* ---------- Hero rings ---------- */
-.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
-.ring-card {
-  position: relative;
-  background: var(--bg-elev); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 18px 14px 16px;
-  display: flex; flex-direction: column; align-items: center;
-}
-.ring { width: 100%; max-width: 150px; transform: rotate(-90deg); }
-.ring-bg { fill: none; stroke: var(--ring-track); stroke-width: 10; }
-.ring-fg {
-  fill: none; stroke: var(--accent); stroke-width: 10; stroke-linecap: round;
-  stroke-dasharray: 326.7; stroke-dashoffset: 326.7;
-  transition: stroke-dashoffset .7s cubic-bezier(.4,0,.2,1), stroke .4s;
-}
-.ring-center {
-  position: absolute; top: 38%; left: 0; right: 0;
-  transform: translateY(-50%); text-align: center;
-}
-.ring-value { font-family: var(--mono); font-size: 32px; font-weight: 700; line-height: 1; }
-.ring-unit { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-.ring-foot { margin-top: 12px; text-align: center; }
-.ring-label { display: block; font-size: 13px; color: var(--text-dim); }
-.ring-note { display: block; font-family: var(--mono); font-size: 13px; margin-top: 3px; color: var(--text); }
+/* ---------- Hero:吉祥物 ---------- */
+.hero-mascot { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
 
-/* 狀態色:套在卡片上 */
-.ring-card.good  .ring-fg { stroke: var(--good); }
-.ring-card.good  .ring-note { color: var(--good); }
-.ring-card.warn  .ring-fg { stroke: var(--warn); }
-.ring-card.warn  .ring-note { color: var(--warn); }
-.ring-card.bad   .ring-fg { stroke: var(--bad); }
-.ring-card.bad   .ring-note { color: var(--bad); }
-.ring-card.good { box-shadow: 0 0 0 1px var(--good), 0 0 22px -8px var(--good); }
+.mascot-card {
+  position: relative; background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 18px 16px 20px;
+  display: flex; flex-direction: column; align-items: center;
+  /* 各狀態的代表色,由 JS 切換 class 控制 */
+  --fill: var(--accent); --glow: transparent;
+  transition: box-shadow .4s;
+}
+.mascot-card.state-blue  { --fill: #5b8cff; }
+.mascot-card.state-green { --fill: var(--good);  --glow: var(--good); }
+.mascot-card.state-amber { --fill: var(--warn);  --glow: var(--warn); }
+.mascot-card.state-red   { --fill: var(--bad);   --glow: var(--bad);  }
+.mascot-card.state-green { box-shadow: 0 0 0 1px var(--glow), 0 0 26px -8px var(--glow); }
+.mascot-card.state-red   { box-shadow: 0 0 0 1px var(--glow), 0 0 30px -6px var(--glow); }
+
+.mascot-wrap { width: 100%; max-width: 230px; }
+.mascot { width: 100%; height: auto; overflow: visible; }
+.mascot-body { fill: var(--bg-elev2); stroke: var(--line); stroke-width: 3; transition: fill .4s; }
+.liquid { fill: var(--fill); opacity: .92; transition: fill .5s; animation: bob 3.2s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(2.5px); } }
+.eye { fill: #11151d; }
+.eye-line { fill: none; stroke: #11151d; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.mouth { fill: none; stroke: #11151d; stroke-width: 4; stroke-linecap: round; }
+.cheek { fill: #ff8aa0; opacity: .55; }
+
+/* 被塞爆:整隻鼓一下 + 抖動 */
+.mascot-card.state-red .mascot { animation: stuffed 1.6s ease-in-out infinite; }
+@keyframes stuffed {
+  0%,100% { transform: scale(1.04) rotate(0deg); }
+  25% { transform: scale(1.06) rotate(-1.5deg); }
+  75% { transform: scale(1.06) rotate(1.5deg); }
+}
+/* 溢出水滴 */
+.drips .drip { fill: var(--fill); opacity: 0; }
+.mascot-card.state-red .drips .drip { animation: drip 1.4s ease-in infinite; }
+.drips .d2 { animation-delay: .45s; }
+.drips .d3 { animation-delay: .9s; }
+@keyframes drip {
+  0% { opacity: 0; transform: translateY(0) scale(.7); }
+  20% { opacity: .95; }
+  100% { opacity: 0; transform: translateY(150px) scale(1); }
+}
+
+.mascot-readout { text-align: center; margin-top: 6px; }
+.big-num { font-family: var(--mono); font-weight: 700; line-height: 1; }
+.big-num #cal-value { font-size: 44px; }
+.big-unit { font-size: 16px; color: var(--text-dim); margin-left: 6px; }
+.mascot-note { font-family: var(--mono); font-size: 14px; color: var(--text-dim); margin-top: 8px; min-height: 18px; }
+.mascot-card.state-green .mascot-note { color: var(--good); }
+.mascot-card.state-amber .mascot-note { color: var(--warn); }
+.mascot-card.state-red .mascot-note { color: var(--bad); font-weight: 700; }
+
+.setup-cta {
+  margin-top: 14px; width: 100%; padding: 12px;
+  background: var(--bg-elev2); border: 1px dashed var(--accent);
+  color: var(--accent); border-radius: 12px; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: var(--sans);
+}
+.setup-cta:hover { background: rgba(91,140,255,.1); }
+
+/* 蛋白條 */
+.pro-bar-card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.pro-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.pro-label { font-size: 14px; color: var(--text-dim); }
+.pro-readout { font-family: var(--mono); font-size: 16px; }
+.pro-readout b { font-size: 20px; }
+.pro-readout span { color: var(--text-dim); }
+.pro-track { height: 12px; background: var(--ring-track); border-radius: 8px; overflow: hidden; }
+.pro-fill {
+  height: 100%; width: 0%; border-radius: 8px; background: var(--bad);
+  transition: width .7s cubic-bezier(.4,0,.2,1), background .4s;
+}
+.pro-bar-card.met .pro-fill { background: var(--good); }
+.pro-bar-card.met .mascot-note { color: var(--good); }
 
 .alert {
   background: rgba(255,176,32,.12); border: 1px solid rgba(255,176,32,.4);
@@ -207,6 +254,14 @@ body {
 .fav-add { background: var(--good); color: #04210f; border: none; border-radius: 9px; padding: 8px 14px; font-weight: 700; cursor: pointer; font-family: var(--sans); }
 .fav-del { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; }
 .divider { height: 1px; background: var(--line); margin: 18px 0; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.pf-preview {
+  margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-elev2); border: 1px solid var(--accent);
+}
+.pf-tdee { font-family: var(--mono); font-size: 18px; }
+.pf-tdee b { font-size: 24px; color: var(--accent); }
+.pf-detail { font-size: 13px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; font-family: var(--mono); }
 
 /* ---------- Toast ---------- */
 .toast {

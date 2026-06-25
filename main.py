@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import config
+import targets
 from auth import current_user, login_user, register_user
 from database import get_cursor, init_pool
 from gemini import analyze_food_image
@@ -60,6 +61,24 @@ class FoodIn(BaseModel):
     name: str = Field(..., min_length=1)
     calories: int = Field(..., ge=0)
     protein_g: float = Field(..., ge=0)
+
+
+class ProfileIn(BaseModel):
+    mode: str = "auto"  # 'auto' | 'manual'
+    # auto 輸入
+    sex: Optional[str] = None
+    age: Optional[int] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    body_fat_pct: Optional[float] = None
+    measured_bmr: Optional[int] = None
+    activity_level: Optional[str] = None
+    goal: Optional[str] = None
+    calorie_adjust: Optional[int] = None
+    # manual 直接輸入目標
+    calories_min: Optional[int] = None
+    calories_max: Optional[int] = None
+    protein_min: Optional[int] = None
 
 
 # --- 時區小工具 ---------------------------------------------------------
@@ -200,31 +219,128 @@ def api_summary(date: Optional[str] = None, user: dict = Depends(current_user)):
 
     consumed_cal = int(agg["calories"])
     consumed_pro = float(agg["protein_g"])
-    t = config.TARGETS
+    consumed = {"calories": consumed_cal, "protein_g": round(consumed_pro, 1)}
 
-    if consumed_cal < t["calories_min"]:
+    prof = _get_profile(user["id"])
+
+    # 沒設定身體數據:不評估目標,前端只顯示熱量數字。
+    if prof is None:
+        return {
+            "date": day_str,
+            "consumed": consumed,
+            "has_profile": False,
+            "targets": None,
+            "cap": None,
+            "remaining": None,
+            "status": None,
+        }
+
+    cmin = prof["calories_min"]
+    cmax = prof["calories_max"]
+    pmin = prof["protein_min"]
+    tdee = prof["tdee"]
+    cap = tdee or cmax  # 吉祥物「滿格」基準:有 TDEE 用 TDEE,否則用熱量上限
+
+    if consumed_cal < cmin:
         cal_status = "under"
-    elif consumed_cal > t["calories_max"]:
+    elif consumed_cal > cmax:
         cal_status = "over"
     else:
         cal_status = "in_range"
-
-    pro_status = "met" if consumed_pro >= t["protein_min"] else "short"
+    pro_status = "met" if consumed_pro >= pmin else "short"
+    tdee_status = "over" if (tdee and consumed_cal > tdee) else "within"
 
     return {
         "date": day_str,
-        "consumed": {"calories": consumed_cal, "protein_g": round(consumed_pro, 1)},
+        "consumed": consumed,
+        "has_profile": True,
         "targets": {
-            "calories_min": t["calories_min"],
-            "calories_max": t["calories_max"],
-            "protein_min": t["protein_min"],
+            "calories_min": cmin,
+            "calories_max": cmax,
+            "protein_min": pmin,
+            "tdee": tdee,
         },
+        "cap": cap,
         "remaining": {
-            "calories_to_min": max(0, t["calories_min"] - consumed_cal),
-            "protein_to_min": round(max(0, t["protein_min"] - consumed_pro), 1),
+            "calories_to_min": max(0, cmin - consumed_cal),
+            "calories_to_tdee": (tdee - consumed_cal) if tdee else None,
+            "protein_to_min": round(max(0, pmin - consumed_pro), 1),
         },
-        "status": {"calories": cal_status, "protein": pro_status},
+        "status": {
+            "calories": cal_status,
+            "protein": pro_status,
+            "tdee": tdee_status,
+        },
     }
+
+
+# ========================================================================
+# 每日目標 / 身體數據(每位會員各自的 TDEE 與目標)
+# ========================================================================
+@app.get("/api/profile")
+def api_get_profile(user: dict = Depends(current_user)):
+    prof = _get_profile(user["id"])
+    return {"profile": prof}
+
+
+@app.post("/api/profile/preview")
+def api_preview_profile(body: ProfileIn, user: dict = Depends(current_user)):
+    """只估算、不存檔,讓前端在儲存前先看 TDEE 與目標。"""
+    try:
+        return targets.compute(body.model_dump())
+    except targets.TargetError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/profile")
+def api_save_profile(body: ProfileIn, user: dict = Depends(current_user)):
+    data = body.model_dump()
+    try:
+        result = targets.compute(data)
+    except targets.TargetError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO profiles (
+                user_id, mode, sex, age, height_cm, weight_kg, body_fat_pct,
+                measured_bmr, activity_level, goal, calorie_adjust,
+                tdee, calories_min, calories_max, protein_min, updated_at
+            ) VALUES (
+                %(user_id)s, %(mode)s, %(sex)s, %(age)s, %(height_cm)s, %(weight_kg)s,
+                %(body_fat_pct)s, %(measured_bmr)s, %(activity_level)s, %(goal)s,
+                %(calorie_adjust)s, %(tdee)s, %(calories_min)s, %(calories_max)s,
+                %(protein_min)s, now()
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+                mode = EXCLUDED.mode, sex = EXCLUDED.sex, age = EXCLUDED.age,
+                height_cm = EXCLUDED.height_cm, weight_kg = EXCLUDED.weight_kg,
+                body_fat_pct = EXCLUDED.body_fat_pct, measured_bmr = EXCLUDED.measured_bmr,
+                activity_level = EXCLUDED.activity_level, goal = EXCLUDED.goal,
+                calorie_adjust = EXCLUDED.calorie_adjust, tdee = EXCLUDED.tdee,
+                calories_min = EXCLUDED.calories_min, calories_max = EXCLUDED.calories_max,
+                protein_min = EXCLUDED.protein_min, updated_at = now()
+            """,
+            {
+                "user_id": user["id"],
+                "mode": data.get("mode") or "auto",
+                "sex": data.get("sex"),
+                "age": data.get("age"),
+                "height_cm": data.get("height_cm"),
+                "weight_kg": data.get("weight_kg"),
+                "body_fat_pct": data.get("body_fat_pct"),
+                "measured_bmr": data.get("measured_bmr"),
+                "activity_level": data.get("activity_level"),
+                "goal": data.get("goal"),
+                "calorie_adjust": result.get("calorie_adjust"),
+                "tdee": result.get("tdee"),
+                "calories_min": result["calories_min"],
+                "calories_max": result["calories_max"],
+                "protein_min": result["protein_min"],
+            },
+        )
+    return {"saved": True, "result": result, "profile": _get_profile(user["id"])}
 
 
 # ========================================================================
@@ -296,6 +412,31 @@ def _serialize_entry(r: dict) -> dict:
         "protein_g": float(r["protein_g"]),
         "source": r["source"],
         "note": r["note"],
+    }
+
+
+def _get_profile(user_id: int) -> Optional[dict]:
+    """取得會員的目標設定;沒設定回 None(summary 會走「只顯示熱量」模式)。"""
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM profiles WHERE user_id = %s", (user_id,))
+        r = cur.fetchone()
+    if r is None:
+        return None
+    return {
+        "mode": r["mode"],
+        "sex": r["sex"],
+        "age": r["age"],
+        "height_cm": float(r["height_cm"]) if r["height_cm"] is not None else None,
+        "weight_kg": float(r["weight_kg"]) if r["weight_kg"] is not None else None,
+        "body_fat_pct": float(r["body_fat_pct"]) if r["body_fat_pct"] is not None else None,
+        "measured_bmr": r["measured_bmr"],
+        "activity_level": r["activity_level"],
+        "goal": r["goal"],
+        "calorie_adjust": r["calorie_adjust"],
+        "tdee": r["tdee"],
+        "calories_min": r["calories_min"],
+        "calories_max": r["calories_max"],
+        "protein_min": r["protein_min"],
     }
 
 

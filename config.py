@@ -43,13 +43,8 @@ LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "10"))
 LOGIN_WINDOW_S = int(os.environ.get("LOGIN_WINDOW_S", "600"))
 LOGIN_BLOCK_S = int(os.environ.get("LOGIN_BLOCK_S", "900"))    # 鎖 15 分鐘
 
-# --- 每日目標(cut 期) -------------------------------------------------
-# 日後要調就改這裡或用環境變數覆蓋。
-TARGETS = {
-    "calories_min": int(os.environ.get("CALORIES_MIN", "1700")),
-    "calories_max": int(os.environ.get("CALORIES_MAX", "1900")),
-    "protein_min": int(os.environ.get("PROTEIN_MIN", "150")),
-}
+# 註:每日目標不再寫死,改由每位會員的身體數據估 TDEE 後計算,
+#     計算邏輯見 targets.py,設定流程見 /api/profile。
 
 # --- 初始常用食物(每位新會員註冊時各帶一份) -------------------------
 SEED_FOODS = [

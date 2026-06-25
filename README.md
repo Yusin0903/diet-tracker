@@ -48,8 +48,9 @@ diet-tracker/
 | `INVITE_CODES` | ✅ | 逗號分隔的邀請碼,**沒設就沒人能註冊** |
 | `SECRET_KEY` | ✅ | JWT 簽章密鑰,用 `openssl rand -hex 32` 產生 |
 | `TOKEN_TTL_DAYS` | | 登入有效天數,預設 30 |
-| `CALORIES_MIN/MAX`、`PROTEIN_MIN` | | 覆蓋每日目標,預設 1700 / 1900 / 150 |
 | `TZ` | | 預設 `Asia/Taipei` |
+
+> 每日目標已改為每位會員自行設定(填規格估 TDEE 或手動輸入),不再用環境變數。
 
 ## 本地開發
 
@@ -81,7 +82,10 @@ uvicorn main:app --reload --port 8000
 | POST | `/api/entries` | 寫入一筆記錄 |
 | GET | `/api/entries?date=YYYY-MM-DD` | 查某日記錄(預設今天,台北時區) |
 | DELETE | `/api/entries/{id}` | 刪一筆 |
-| GET | `/api/summary?date=YYYY-MM-DD` | 當日加總 + 對照目標 |
+| GET | `/api/summary?date=YYYY-MM-DD` | 當日加總 + 對照目標(含 `has_profile`、`tdee`、`cap`) |
+| GET | `/api/profile` | 取得會員的身體數據 / 目標 |
+| POST | `/api/profile/preview` | 試算 TDEE 與目標(**不存檔**) |
+| PUT | `/api/profile` | 儲存身體數據,計算並存下 TDEE 與目標 |
 | GET / POST | `/api/foods` | 常用食物清單 / 新增 |
 | DELETE | `/api/foods/{id}` | 刪常用食物 |
 
@@ -123,11 +127,33 @@ uvicorn main:app --reload --port 8000
 > 想更嚴格:把邀請碼改成「單次使用」(用掉就失效)、或加上每組碼的註冊人數上限,
 > 都可以在 `auth.register_user` 配一張 DB 表來做。自用情境通常高熵碼 + 速率限制就夠。
 
-## 每日目標(cut 期)
+## 每日目標 & TDEE(每位會員各自計算)
 
-| 指標 | 值 |
+目標不再寫死,而是**由每位會員的身體數據估出 TDEE** 再換算:
+
+- **自動估算**:填性別/年齡/身高/體重/活動量/目標 → Mifflin-St Jeor 估 BMR × 活動係數 = TDEE。
+- **體脂測量**:有體脂率(InBody/體脂計)→ 改用 **Katch-McArdle**(以淨體重估,較準),蛋白目標也用淨體重算;量測報告若直接給 BMR,可填入直接採用(最準)。
+- **手動輸入**:已知自己目標的人,直接填熱量上下限與蛋白下限。
+
+由 TDEE 與目標(`cut`/`maintain`/`bulk`)算出:熱量目標區間、蛋白目標、以及 **TDEE 上限**。
+
+| 公式 | 何時用 |
 |---|---|
-| 每日熱量目標 | 1700–1900 kcal |
-| 每日蛋白目標 | 150g(下限) |
+| Mifflin-St Jeor | 只有基本規格時 |
+| Katch-McArdle | 有體脂率時(較準) |
+| 量測 BMR | 報告直接給 BMR(最準) |
 
-熱量進入 1700–1900 會亮**達標綠燈**;蛋白未達 150g 會在首頁明顯警示(cut 期最關鍵的指標)。
+活動係數:久坐 1.2 / 輕度 1.375 / 中度 1.55 / 高度 1.725 / 非常高 1.9。
+目標調整:減脂 −400、維持 0、增肌 +250 kcal(可用 `calorie_adjust` 覆蓋)。
+
+### 首頁可愛吉祥物
+
+熱量視覺是一隻**圓滾滾吉祥物**,肚子像水位一樣隨當天吃的熱量往上填:
+
+- 還沒到目標 → 藍色、半空。
+- 進入熱量目標區間 → **變綠、亮達標光暈**。
+- 超出目標但還沒到 TDEE → 橘色提醒。
+- **超過 TDEE → 整隻變紅、鼓起來、頭頂溢出水滴、表情被塞爆**,並顯示「超過 TDEE ⬜ kcal」。
+
+**沒設定身體數據的會員**:不評估目標,首頁就單純顯示今天吃了多少熱量,並提示去設定。
+蛋白未達標一樣在首頁明顯警示(cut 期最關鍵的指標)。
