@@ -4,7 +4,7 @@ import time
 import pytest
 from fastapi import HTTPException
 
-from ratelimit import RateLimiter
+from app.rate_limit import RateLimiter
 
 
 def test_locks_after_threshold():

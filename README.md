@@ -1,175 +1,183 @@
-# 飲控 App 🥗
+# Diet Tracker 🥗
 
-自用的飲食記錄工具:**快速記錄 + 自動加總對照每日目標**。拍食物照讓 Gemini 估熱量/蛋白、手動輸入、或從常用食物一鍵記錄,首頁一眼看「今天吃了多少 / 還剩多少」。
+**English** · [繁體中文](README.zh-TW.md)
 
-加了**會員系統**:需要**邀請碼**才能註冊(不能無腦註冊),登入後資料各自獨立。
+A diet-logging tool built around one core value: **log fast + auto-total against your daily goals**. Snap a food photo and let Gemini estimate calories/protein, type them in manually, or one-tap a favorite. The home screen shows at a glance "how much you've eaten today / how much room is left."
 
-## 技術選型
+It has a **member system**: an **invite code** is required to register (no open sign-up), and each member's data is fully isolated.
 
-| 層 | 技術 |
+## Tech stack
+
+| Layer | Tech |
 |---|---|
-| 後端 | Python + FastAPI |
-| 資料庫 | Postgres(`DATABASE_URL` 連線) |
-| 前端 | PWA(可加到主畫面、相機拍照) |
-| AI | Gemini 2.5 Flash(vision,JSON 輸出) |
-| 部署 | Zeabur |
+| Backend | Python + FastAPI |
+| Database | Postgres (`DATABASE_URL`) |
+| Frontend | PWA (add-to-home-screen, camera capture) |
+| AI | Gemini 2.5 Flash (vision, JSON output) |
+| Deploy | Zeabur |
 
-> **GEMINI_API_KEY 與邀請碼只放後端,從環境變數讀取,絕不進前端。**
+> **`GEMINI_API_KEY` and invite codes live only on the backend, read from env — they never reach the frontend.**
 
-## 專案結構
+## Project structure
 
 ```
 diet-tracker/
-├── main.py            # FastAPI app + 所有 endpoints + serve PWA
-├── config.py          # 環境變數、每日目標、邀請碼、seed 食物
-├── database.py        # Postgres 連線池、建表、seed
-├── schema.sql         # users / entries / foods
-├── auth.py            # 註冊(需邀請碼)/ 登入 / JWT / 密碼雜湊
-├── gemini.py          # Gemini 2.5 Flash vision 整合
-├── frontend/          # PWA(static)
-│   ├── index.html
-│   ├── styles.css
-│   ├── app.js
-│   ├── manifest.json
-│   ├── sw.js
-│   └── icons/
+├── app/                      # FastAPI application package
+│   ├── main.py               # Assembles the app: lifespan, include routers, mount static
+│   ├── settings.py           # pydantic-settings config (env vars, seed foods)
+│   ├── db.py                 # Postgres connection pool, table init
+│   ├── security.py           # Password hashing, JWT, current_user dependency
+│   ├── rate_limit.py         # Per-IP rate limiter (brute-force protection)
+│   ├── deps.py               # Timezone resolve, day bounds, entry serialization
+│   ├── schemas.py            # Pydantic request models
+│   ├── sql/schema.sql        # users / profiles / entries / foods
+│   ├── routers/              # One APIRouter per resource
+│   │   ├── auth.py           # /api/auth (register / login / me)
+│   │   ├── analyze.py        # /api/analyze
+│   │   ├── entries.py        # /api/entries
+│   │   ├── summary.py        # /api/summary
+│   │   ├── foods.py          # /api/foods
+│   │   └── profile.py        # /api/profile
+│   └── services/             # Business logic
+│       ├── users.py          # register / login / invite codes
+│       ├── profile.py        # target read/write
+│       ├── targets.py        # TDEE / calorie / protein estimation
+│       └── gemini.py         # Gemini 2.5 Flash vision
+├── frontend/                 # PWA (static): index.html / app.js / styles.css / sw.js / icons
+├── tests/                    # pytest (targets / ratelimit / auth / api)
 ├── requirements.txt
 ├── Dockerfile
 └── .env.example
 ```
 
-## 環境變數
+## Environment variables
 
-| 變數 | 必填 | 說明 |
+| Var | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | ✅ | Postgres 連線字串 |
-| `GEMINI_API_KEY` | ✅(要用拍照辨識) | Gemini API key |
-| `GEMINI_MODEL` | | 預設 `gemini-2.5-flash` |
-| `INVITE_CODES` | ✅ | 逗號分隔的邀請碼,**沒設就沒人能註冊** |
-| `SECRET_KEY` | ✅ | JWT 簽章密鑰,用 `openssl rand -hex 32` 產生 |
-| `TOKEN_TTL_DAYS` | | 登入有效天數,預設 30 |
-| `TZ` | | 預設 `Asia/Taipei` |
+| `DATABASE_URL` | ✅ | Postgres connection string |
+| `GEMINI_API_KEY` | ✅ (for photo analysis) | Gemini API key |
+| `GEMINI_MODEL` | | Defaults to `gemini-2.5-flash` |
+| `INVITE_CODES` | ✅ | Comma-separated invite codes; **unset = nobody can register** |
+| `SECRET_KEY` | ✅ | JWT signing key, generate with `openssl rand -hex 32` |
+| `TOKEN_TTL_DAYS` | | Login validity in days, defaults to 30 |
+| `TZ` | | Defaults to `Asia/Taipei` |
 
-> 每日目標已改為每位會員自行設定(填規格估 TDEE 或手動輸入),不再用環境變數。
+> Daily targets are no longer set via env — each member configures their own (estimate TDEE from specs, or enter manually).
 
-### 「今天」的時區
+### What counts as "today" (timezone)
 
-前端會用 `Intl` **自動偵測每位使用者裝置的時區**,隨 API 帶給後端,「今天」的日界線就依各自時區計算(後端沒收到或無效時退回 `Asia/Taipei`)。所以人在不同時區的會員,跨日不會記錯天。`TZ` 環境變數只當作後端的預設後備值。
+The frontend uses `Intl` to **auto-detect each user's device timezone** and passes it to the API, so the day boundary is computed in each user's own zone (the backend falls back to `Asia/Taipei` if it's missing or invalid). Members in different timezones won't log on the wrong day. The `TZ` env var is only the backend's fallback default.
 
-## 本地開發
+## Local development
 
 ```bash
-# 1. 準備 Postgres(本機或 Docker)
+# 1. Start Postgres (locally or via Docker)
 docker run -d --name diet-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
 
-# 2. 設定環境變數
-cp .env.example .env        # 編輯填入 GEMINI_API_KEY、INVITE_CODES、SECRET_KEY
+# 2. Configure environment
+cp .env.example .env        # fill in GEMINI_API_KEY, INVITE_CODES, SECRET_KEY
 export $(grep -v '^#' .env | xargs)
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
 
-# 3. 裝套件並啟動
+# 3. Install deps and run
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
 
-開 http://localhost:8000 →「註冊」分頁,用 `INVITE_CODES` 裡的任一組邀請碼註冊。
-建表與 seed 常用食物會在啟動 / 註冊時自動完成。
+Open http://localhost:8000 → "Register" tab, and sign up with any code from `INVITE_CODES`.
+Tables and seed favorites are created automatically on startup / registration.
 
-## 測試
+## Tests
 
 ```bash
 pip install -r requirements.txt
-pytest                 # 純函式測試(targets/ratelimit/auth)免 DB
-# 要連同 API 整合測試一起跑,設好 DATABASE_URL(會 TRUNCATE 該庫的表):
+pytest                 # pure-function tests (targets/ratelimit/auth), no DB needed
+# To also run the API integration tests, set DATABASE_URL (it TRUNCATEs that DB's tables):
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/diet
 pytest
 ```
 
-沒設 `DATABASE_URL` 時,需要資料庫的 API 測試會自動跳過,純邏輯測試照跑。
+Without `DATABASE_URL`, the DB-backed API tests auto-skip and the pure-logic tests still run.
 
 ## API
 
-| Method | Path | 說明 |
+| Method | Path | Description |
 |---|---|---|
 | POST | `/api/auth/register` | `{username, password, invite_code}` → `{token, username}` |
 | POST | `/api/auth/login` | `{username, password}` → `{token, username}` |
-| GET | `/api/auth/me` | 驗證 token |
-| POST | `/api/analyze` | 上傳圖片(multipart),回 Gemini 估值,**不寫 DB** |
-| POST | `/api/entries` | 寫入一筆記錄 |
-| GET | `/api/entries?date=YYYY-MM-DD` | 查某日記錄(預設今天,台北時區) |
-| DELETE | `/api/entries/{id}` | 刪一筆 |
-| GET | `/api/summary?date=YYYY-MM-DD` | 當日加總 + 對照目標(含 `has_profile`、`tdee`、`cap`) |
-| GET | `/api/profile` | 取得會員的身體數據 / 目標 |
-| POST | `/api/profile/preview` | 試算 TDEE 與目標(**不存檔**) |
-| PUT | `/api/profile` | 儲存身體數據,計算並存下 TDEE 與目標 |
-| GET / POST | `/api/foods` | 常用食物清單 / 新增 |
-| DELETE | `/api/foods/{id}` | 刪常用食物 |
+| GET | `/api/auth/me` | Validate token |
+| POST | `/api/analyze` | Upload an image (multipart), returns Gemini estimate, **does not write to DB** |
+| POST | `/api/entries` | Create one entry |
+| GET | `/api/entries?date=YYYY-MM-DD` | List a day's entries (defaults to today, user timezone) |
+| DELETE | `/api/entries/{id}` | Delete one entry |
+| GET | `/api/summary?date=YYYY-MM-DD` | Daily totals vs. targets (incl. `has_profile`, `tdee`, `cap`) |
+| GET | `/api/profile` | Get the member's body data / targets |
+| POST | `/api/profile/preview` | Estimate TDEE & targets (**no write**) |
+| PUT | `/api/profile` | Save body data, compute & store TDEE and targets |
+| GET / POST | `/api/foods` | Favorite foods list / create |
+| DELETE | `/api/foods/{id}` | Delete a favorite |
 
-除 `register`/`login` 外,所有 `/api` 都需帶 `Authorization: Bearer <token>`。
+Every `/api` route except `register`/`login` requires `Authorization: Bearer <token>`.
 
-`/api/analyze` 只把「圖片 → 估值」回給前端,使用者**確認/修改後**才呼叫 `/api/entries` 寫入 —— AI 的誤差由人把關。
+`/api/analyze` only returns the "image → estimate" to the frontend; the user **confirms/edits**, then `/api/entries` writes it — a human checks the AI's error.
 
-## Zeabur 部署
+## Deploying to Zeabur
 
-1. **開 Postgres**:Zeabur 專案 → Marketplace → 一鍵開 PostgreSQL。
-2. **加後端 service**:從這個 GitHub repo 部署。Zeabur 會偵測到 `Dockerfile`(或 `requirements.txt`)。
-3. **設環境變數**(後端 service):
-   - `DATABASE_URL` → 引用 Postgres 的 `${postgres.DATABASE_URL}`
-   - `GEMINI_API_KEY`、`GEMINI_MODEL`
-   - `INVITE_CODES`(例:`alpha2026,bravo2026`)
-   - `SECRET_KEY`(`openssl rand -hex 32`)
+1. **Add Postgres**: Zeabur project → Marketplace → one-click PostgreSQL.
+2. **Add the backend service**: deploy from this GitHub repo. Zeabur detects the `Dockerfile` (or `requirements.txt`).
+3. **Set environment variables** (backend service):
+   - `DATABASE_URL` → reference Postgres's `${postgres.DATABASE_URL}`
+   - `GEMINI_API_KEY`, `GEMINI_MODEL`
+   - `INVITE_CODES` (e.g. `alpha2026,bravo2026`)
+   - `SECRET_KEY` (`openssl rand -hex 32`)
    - `TZ=Asia/Taipei`
-4. Deploy。前端靜態檔由 FastAPI 直接 serve,不需另外開 service。
-5. 開好的網址即可加到手機主畫面(PWA)。
+4. Deploy. The frontend static files are served directly by FastAPI — no separate service needed.
+5. The resulting URL can be added to a phone's home screen (PWA).
 
-## 邀請碼怎麼運作
+## How invite codes work
 
-- 註冊時必須帶 `INVITE_CODES` 裡的其中一組碼,否則回 `403 邀請碼無效`。
-- 沒設定 `INVITE_CODES`(空值)時,**任何人都無法註冊**——預設就是關上的。
-- 要再多放人進來就在環境變數加一組碼、重新部署即可。
+- Registration requires one of the codes in `INVITE_CODES`, otherwise it returns `403 invalid invite code`.
+- When `INVITE_CODES` is unset (empty), **nobody can register** — closed by default.
+- To let more people in, add a code to the env var and redeploy.
 
-### 防暴力破解(邀請碼/密碼)
+### Brute-force protection (invite codes / passwords)
 
-兩道防線,缺一不可:
+Two layers, both needed:
 
-1. **高熵邀請碼(治本)**:用 `openssl rand -hex 16` 產生 32 字隨機碼,別用 `alpha2026`
-   這類好記的單字+年份——後者用字典幾千次就試出來了。高熵碼讓「猜中」在數學上不可能。
-2. **速率限制(治標)**:`/api/auth/register`、`/api/auth/login` 都做了 per-IP 滑動視窗限制。
-   同一 IP 短時間內猜錯太多次就鎖定一段時間回 `429`,成功則清零、不影響正常使用者。
-   門檻可用 `REG_*`、`LOGIN_*` 環境變數調整(見 `.env.example`)。
-   - 走 Zeabur 反向代理時,真實 IP 從 `X-Forwarded-For` 取得。
-   - 速率計數放在記憶體;單副本夠用,日後若水平擴展成多副本要改用 Redis 之類的共享儲存。
+1. **High-entropy invite codes (the real fix)**: generate a 32-char random code with `openssl rand -hex 16`, not a guessable `alpha2026`-style word+year — the latter falls to a dictionary in a few thousand tries. A high-entropy code makes guessing mathematically infeasible.
+2. **Rate limiting (the safety net)**: `/api/auth/register` and `/api/auth/login` both have a per-IP sliding-window limiter. Too many wrong attempts from one IP locks it for a while (`429`); success resets the counter so legit users are unaffected. Thresholds are tunable via `REG_*` / `LOGIN_*` env vars (see `.env.example`).
+   - Behind Zeabur's reverse proxy, the real client IP comes from `X-Forwarded-For`.
+   - The counter is in-memory; fine for a single instance. If you scale to multiple replicas, switch to a shared store like Redis.
 
-> 想更嚴格:把邀請碼改成「單次使用」(用掉就失效)、或加上每組碼的註冊人數上限,
-> 都可以在 `auth.register_user` 配一張 DB 表來做。自用情境通常高熵碼 + 速率限制就夠。
+> Want it stricter? Make codes single-use (invalidated once consumed) or cap registrations per code — both can be done with a DB table in `app/services/users.py`. For personal use, a high-entropy code + rate limiting is usually enough.
 
-## 每日目標 & TDEE(每位會員各自計算)
+## Daily targets & TDEE (computed per member)
 
-目標不再寫死,而是**由每位會員的身體數據估出 TDEE** 再換算:
+Targets are no longer hardcoded — each member's **TDEE is estimated from their own body data** and converted into goals:
 
-- **自動估算**:填性別/年齡/身高/體重/活動量/目標 → Mifflin-St Jeor 估 BMR × 活動係數 = TDEE。
-- **體脂測量**:有體脂率(InBody/體脂計)→ 改用 **Katch-McArdle**(以淨體重估,較準),蛋白目標也用淨體重算;量測報告若直接給 BMR,可填入直接採用(最準)。
-- **手動輸入**:已知自己目標的人,直接填熱量上下限與蛋白下限。
+- **Auto estimate**: enter sex/age/height/weight/activity/goal → Mifflin-St Jeor BMR × activity factor = TDEE.
+- **Body composition**: with a body fat % (from an InBody / smart scale), it switches to **Katch-McArdle** (lean-body-mass based, more accurate), and the protein target uses LBM too. If a scan reports a measured BMR, enter it to use directly (most accurate).
+- **Manual**: if you already know your numbers, enter the calorie range and protein floor directly.
 
-由 TDEE 與目標(`cut`/`maintain`/`bulk`)算出:熱量目標區間、蛋白目標、以及 **TDEE 上限**。
+From TDEE and the goal (`cut`/`maintain`/`bulk`) it derives: a calorie target range, a protein target, and the **TDEE ceiling**.
 
-| 公式 | 何時用 |
+| Formula | When |
 |---|---|
-| Mifflin-St Jeor | 只有基本規格時 |
-| Katch-McArdle | 有體脂率時(較準) |
-| 量測 BMR | 報告直接給 BMR(最準) |
+| Mifflin-St Jeor | Only basic specs available |
+| Katch-McArdle | Body fat % available (more accurate) |
+| Measured BMR | A scan reports BMR directly (most accurate) |
 
-活動係數:久坐 1.2 / 輕度 1.375 / 中度 1.55 / 高度 1.725 / 非常高 1.9。
-目標調整:減脂 −400、維持 0、增肌 +250 kcal(可用 `calorie_adjust` 覆蓋)。
+Activity factors: sedentary 1.2 / light 1.375 / moderate 1.55 / active 1.725 / very active 1.9.
+Goal adjustment: cut −400, maintain 0, bulk +250 kcal (override via `calorie_adjust`).
 
-### 首頁可愛吉祥物
+### The home-screen mascot
 
-熱量視覺是一隻**圓滾滾吉祥物**,肚子像水位一樣隨當天吃的熱量往上填:
+The calorie visual is a **round mascot** whose belly fills like a water level as you eat through the day:
 
-- 還沒到目標 → 藍色、半空。
-- 進入熱量目標區間 → **變綠、亮達標光暈**。
-- 超出目標但還沒到 TDEE → 橘色提醒。
-- **超過 TDEE → 整隻變紅、鼓起來、頭頂溢出水滴、表情被塞爆**,並顯示「超過 TDEE ⬜ kcal」。
+- Below target → blue, half-empty.
+- Inside the calorie target range → **turns green with a "goal met" glow**.
+- Over target but still under TDEE → amber warning.
+- **Over TDEE → it turns red, puffs up, overflows with drips over its head, face looks stuffed**, and shows "over TDEE by N kcal".
 
-**沒設定身體數據的會員**:不評估目標,首頁就單純顯示今天吃了多少熱量,並提示去設定。
-蛋白未達標一樣在首頁明顯警示(cut 期最關鍵的指標)。
+**Members without a profile**: no evaluation — the home screen just shows today's calories and prompts you to set up.
+Protein below target still shows a clear home-screen alert (the key metric during a cut).

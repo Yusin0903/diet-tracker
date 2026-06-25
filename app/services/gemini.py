@@ -8,7 +8,7 @@ import json
 from google import genai
 from google.genai import types
 
-import config
+from app.settings import settings
 
 ANALYZE_PROMPT = """你是營養估算助手。分析這張食物照片,估算整份餐點的熱量與蛋白質。
 規則:
@@ -34,16 +34,16 @@ _client: genai.Client | None = None
 def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        if not config.GEMINI_API_KEY:
+        if not settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY 尚未設定")
-        _client = genai.Client(api_key=config.GEMINI_API_KEY)
+        _client = genai.Client(api_key=settings.gemini_api_key)
     return _client
 
 
 def analyze_food_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
     client = _get_client()
     resp = client.models.generate_content(
-        model=config.GEMINI_MODEL,
+        model=settings.gemini_model,
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             ANALYZE_PROMPT,
