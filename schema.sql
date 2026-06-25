@@ -7,6 +7,26 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 每位會員的每日目標設定(由規格估算或手動填,沒有則用系統預設)
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    mode           TEXT NOT NULL DEFAULT 'auto',   -- 'auto' | 'manual'
+    sex            TEXT,                            -- 'male' | 'female'
+    age            INTEGER,
+    height_cm      NUMERIC(5,1),
+    weight_kg      NUMERIC(5,1),
+    body_fat_pct   NUMERIC(4,1),                    -- 體脂率(可選,有就用 Katch-McArdle)
+    measured_bmr   INTEGER,                         -- 量測報告直接給的 BMR(可選,最準)
+    activity_level TEXT,
+    goal           TEXT,                            -- 'cut' | 'maintain' | 'bulk'
+    calorie_adjust INTEGER,                         -- 對 TDEE 的熱量調整(可選,覆蓋預設)
+    tdee           INTEGER,                         -- 估出的 TDEE(吉祥物「滿出來」的基準;manual 模式可為 NULL)
+    calories_min   INTEGER NOT NULL,
+    calories_max   INTEGER NOT NULL,
+    protein_min    INTEGER NOT NULL,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- 一筆飲食記錄
 CREATE TABLE IF NOT EXISTS entries (
     id          SERIAL PRIMARY KEY,
