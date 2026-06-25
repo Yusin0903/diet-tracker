@@ -75,6 +75,18 @@ uvicorn main:app --reload --port 8000
 開 http://localhost:8000 →「註冊」分頁,用 `INVITE_CODES` 裡的任一組邀請碼註冊。
 建表與 seed 常用食物會在啟動 / 註冊時自動完成。
 
+## 測試
+
+```bash
+pip install -r requirements.txt
+pytest                 # 純函式測試(targets/ratelimit/auth)免 DB
+# 要連同 API 整合測試一起跑,設好 DATABASE_URL(會 TRUNCATE 該庫的表):
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/diet
+pytest
+```
+
+沒設 `DATABASE_URL` 時,需要資料庫的 API 測試會自動跳過,純邏輯測試照跑。
+
 ## API
 
 | Method | Path | 說明 |

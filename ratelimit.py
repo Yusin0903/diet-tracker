@@ -46,7 +46,21 @@ class RateLimiter:
                 dq.popleft()
             if len(dq) >= self.max_failures:
                 self._blocked[key] = now + self.block_s
-                dq.clear()
+                del self._fails[key]  # 已上鎖,失敗記錄不必再留
+            # 定期清掉早就過期的 key,避免大量不同 IP 累積佔記憶體
+            if len(self._fails) > 2048:
+                self._prune(now)
+
+    def _prune(self, now: float) -> None:
+        """移除視窗外已無有效失敗記錄的 key(呼叫端需持有 _lock)。"""
+        for k in list(self._fails):
+            dq = self._fails[k]
+            while dq and dq[0] < now - self.window_s:
+                dq.popleft()
+            if not dq:
+                del self._fails[k]
+        for k in [k for k, until in self._blocked.items() if until <= now]:
+            del self._blocked[k]
 
     def reset(self, key: str) -> None:
         """成功後清除該 key 的失敗記錄。"""

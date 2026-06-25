@@ -19,7 +19,10 @@ def init_pool() -> None:
     global _pool
     if not config.DATABASE_URL:
         raise RuntimeError("DATABASE_URL 尚未設定")
-    _pool = ThreadedConnectionPool(minconn=1, maxconn=10, dsn=config.DATABASE_URL)
+    # maxconn 需 >= FastAPI 同步端點的執行緒併發數,否則高併發時 getconn
+    # 會丟 PoolError。可用 DB_MAX_CONN 覆蓋。
+    max_conn = int(os.environ.get("DB_MAX_CONN", "40"))
+    _pool = ThreadedConnectionPool(minconn=1, maxconn=max_conn, dsn=config.DATABASE_URL)
     _create_tables()
 
 
@@ -51,24 +54,14 @@ def get_cursor(commit: bool = False):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
             yield cur
+            # commit 寫入;讀取路徑也要 rollback,否則連線會以
+            # 「idle in transaction」歸還連線池(持有快照、擋 VACUUM)。
             if commit:
                 conn.commit()
+            else:
+                conn.rollback()
         except Exception:
             conn.rollback()
             raise
         finally:
             cur.close()
-
-
-def seed_foods_for_user(user_id: int) -> None:
-    """為新會員塞入預設常用食物。"""
-    with get_cursor(commit=True) as cur:
-        for food in config.SEED_FOODS:
-            cur.execute(
-                """
-                INSERT INTO foods (user_id, name, calories, protein_g)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (user_id, name) DO NOTHING
-                """,
-                (user_id, food["name"], food["calories"], food["protein_g"]),
-            )
