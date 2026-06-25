@@ -65,6 +65,8 @@ def compute_auto(p: dict) -> dict:
     # --- BMR ---
     measured_bmr = p.get("measured_bmr")
     if measured_bmr:
+        if float(measured_bmr) <= 0:
+            raise TargetError("量測 BMR 需大於 0")
         bmr = float(measured_bmr)
         method = "measured"          # 測量報告直接給 BMR,最準
     elif lbm is not None:
@@ -79,6 +81,8 @@ def compute_auto(p: dict) -> dict:
             raise TargetError(
                 "沒有體脂或量測 BMR 時,需填性別、年齡、身高、體重才能估算"
             )
+        if int(age) <= 0 or float(height) <= 0:
+            raise TargetError("年齡與身高需大於 0")
         base = 10 * weight + 6.25 * float(height) - 5 * int(age)
         bmr = base + (5 if sex == "male" else -161)
         method = "mifflin"

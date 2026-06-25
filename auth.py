@@ -14,7 +14,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import config
-from database import get_cursor, seed_foods_for_user
+from database import get_cursor
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -78,6 +78,8 @@ def register_user(username: str, password: str, invite_code: str) -> dict:
     if not check_invite_code(invite_code):
         raise HTTPException(status_code=403, detail="邀請碼無效")
 
+    # 建立使用者 + seed 常用食物在同一個交易內,確保不會產生「有帳號但沒
+    # seed」的半套狀態。
     with get_cursor(commit=True) as cur:
         cur.execute("SELECT id FROM users WHERE username = %s", (username,))
         if cur.fetchone():
@@ -90,8 +92,16 @@ def register_user(username: str, password: str, invite_code: str) -> dict:
             (username, hash_password(password), invite_code.strip()),
         )
         row = cur.fetchone()
+        for food in config.SEED_FOODS:
+            cur.execute(
+                """
+                INSERT INTO foods (user_id, name, calories, protein_g)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id, name) DO NOTHING
+                """,
+                (row["id"], food["name"], food["calories"], food["protein_g"]),
+            )
 
-    seed_foods_for_user(row["id"])
     token = create_token(row["id"], row["username"])
     return {"token": token, "username": row["username"]}
 
