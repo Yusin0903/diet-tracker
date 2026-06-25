@@ -1,6 +1,10 @@
 "use strict";
 
 const TOKEN_KEY = "diet_token";
+// 自動偵測這台裝置的時區,讓「今天」依使用者所在時區計算(後端沒帶就退回台北)。
+const TZ =
+  (Intl.DateTimeFormat().resolvedOptions().timeZone) || "Asia/Taipei";
+const tzq = (path) => path + (path.includes("?") ? "&" : "?") + "tz=" + encodeURIComponent(TZ);
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || null,
@@ -129,7 +133,7 @@ function setMascotState(cls) {
 }
 
 async function loadSummary() {
-  const s = await api("/api/summary");
+  const s = await api(tzq("/api/summary"));
   $("today-date").textContent = s.date;
   const cal = s.consumed.calories;
   const pro = s.consumed.protein_g;
@@ -194,7 +198,7 @@ async function loadSummary() {
 const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐" };
 
 async function loadEntries() {
-  const entries = await api("/api/entries");
+  const entries = await api(tzq("/api/entries"));
   const list = $("entry-list");
   list.innerHTML = "";
   $("empty-hint").hidden = entries.length > 0;
@@ -231,7 +235,7 @@ async function loadEntries() {
 }
 
 async function createEntry(payload) {
-  await api("/api/entries", { method: "POST", body: payload });
+  await api(tzq("/api/entries"), { method: "POST", body: payload });
   closeModal();
   await refresh();
   toast("已記錄 ✓");

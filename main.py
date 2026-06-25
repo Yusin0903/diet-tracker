@@ -1,11 +1,13 @@
 """飲控 App 後端入口。
 
 FastAPI + Postgres + Gemini vision,並 serve PWA 靜態檔。
-所有飲食資料皆以登入會員(JWT)為界,且依台北時區計算「今天」。
+所有飲食資料皆以登入會員(JWT)為界;「今天」依前端帶上的使用者時區計算
+(自動偵測,沒帶就退回 Asia/Taipei)。
 """
 import os
 from datetime import datetime, time, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -82,16 +84,26 @@ class ProfileIn(BaseModel):
 
 
 # --- 時區小工具 ---------------------------------------------------------
-def _taipei_day_bounds(date_str: Optional[str]) -> tuple[datetime, datetime, str]:
-    """回傳某台北自然日的 [起, 迄) UTC-aware 邊界,及該日字串。"""
+def _resolve_tz(tz_name: Optional[str]) -> ZoneInfo:
+    """把前端帶來的 IANA 時區字串轉成 ZoneInfo,無效則退回台北。"""
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except Exception:  # noqa: BLE001 (未知/無效時區字串)
+            pass
+    return config.TAIPEI
+
+
+def _day_bounds(date_str: Optional[str], tz: ZoneInfo) -> tuple[datetime, datetime, str]:
+    """回傳某使用者時區自然日的 [起, 迄) UTC-aware 邊界,及該日字串。"""
     if date_str:
         try:
             day = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式需為 YYYY-MM-DD")
     else:
-        day = datetime.now(config.TAIPEI).date()
-    start = datetime.combine(day, time.min, tzinfo=config.TAIPEI)
+        day = datetime.now(tz).date()
+    start = datetime.combine(day, time.min, tzinfo=tz)
     end = start + timedelta(days=1)
     return start, end, day.isoformat()
 
@@ -152,7 +164,9 @@ async def api_analyze(
 # 飲食記錄
 # ========================================================================
 @app.post("/api/entries")
-def api_create_entry(body: EntryIn, user: dict = Depends(current_user)):
+def api_create_entry(
+    body: EntryIn, tz: Optional[str] = None, user: dict = Depends(current_user)
+):
     if body.source not in ("photo", "manual", "favorite"):
         raise HTTPException(status_code=400, detail="source 不合法")
     with get_cursor(commit=True) as cur:
@@ -165,14 +179,17 @@ def api_create_entry(body: EntryIn, user: dict = Depends(current_user)):
             (user["id"], body.name, body.calories, body.protein_g, body.source, body.note),
         )
         row = cur.fetchone()
-    return _serialize_entry(row)
+    return _serialize_entry(row, _resolve_tz(tz))
 
 
 @app.get("/api/entries")
 def api_list_entries(
-    date: Optional[str] = None, user: dict = Depends(current_user)
+    date: Optional[str] = None,
+    tz: Optional[str] = None,
+    user: dict = Depends(current_user),
 ):
-    start, end, _ = _taipei_day_bounds(date)
+    zone = _resolve_tz(tz)
+    start, end, _ = _day_bounds(date, zone)
     with get_cursor() as cur:
         cur.execute(
             """
@@ -184,7 +201,7 @@ def api_list_entries(
             (user["id"], start, end),
         )
         rows = cur.fetchall()
-    return [_serialize_entry(r) for r in rows]
+    return [_serialize_entry(r, zone) for r in rows]
 
 
 @app.delete("/api/entries/{entry_id}")
@@ -203,8 +220,12 @@ def api_delete_entry(entry_id: int, user: dict = Depends(current_user)):
 # 當日加總 + 對照目標
 # ========================================================================
 @app.get("/api/summary")
-def api_summary(date: Optional[str] = None, user: dict = Depends(current_user)):
-    start, end, day_str = _taipei_day_bounds(date)
+def api_summary(
+    date: Optional[str] = None,
+    tz: Optional[str] = None,
+    user: dict = Depends(current_user),
+):
+    start, end, day_str = _day_bounds(date, _resolve_tz(tz))
     with get_cursor() as cur:
         cur.execute(
             """
@@ -403,10 +424,10 @@ def api_delete_food(food_id: int, user: dict = Depends(current_user)):
 
 
 # --- helpers ------------------------------------------------------------
-def _serialize_entry(r: dict) -> dict:
+def _serialize_entry(r: dict, tz: ZoneInfo = config.TAIPEI) -> dict:
     return {
         "id": r["id"],
-        "eaten_at": r["eaten_at"].astimezone(config.TAIPEI).isoformat(),
+        "eaten_at": r["eaten_at"].astimezone(tz).isoformat(),
         "name": r["name"],
         "calories": r["calories"],
         "protein_g": float(r["protein_g"]),
