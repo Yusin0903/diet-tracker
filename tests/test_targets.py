@@ -1,7 +1,7 @@
 """targets.py 的單元測試:TDEE / 熱量 / 蛋白估算與輸入驗證。"""
 import pytest
 
-import targets
+from app.services import targets
 
 
 # ---------- Mifflin-St Jeor ----------

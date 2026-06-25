@@ -17,13 +17,14 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def client():
-    import config
-    config.INVITE_CODES = {"testcode"}  # 測試用邀請碼
+    from app.settings import settings
+    settings.invite_codes_raw = "testcode"  # 測試用邀請碼
     from fastapi.testclient import TestClient
-    import main, database
+    from app import db
+    from app.main import app
 
-    with TestClient(main.app) as c:
-        with database.get_cursor(commit=True) as cur:
+    with TestClient(app) as c:
+        with db.get_cursor(commit=True) as cur:
             cur.execute(
                 "TRUNCATE users, entries, foods, profiles RESTART IDENTITY CASCADE"
             )

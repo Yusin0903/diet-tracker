@@ -5,6 +5,7 @@ python-multipart==0.0.20
 PyJWT==2.10.1
 google-genai==0.8.0
 pydantic==2.10.4
+pydantic-settings==2.7.0
 
 # 測試(開發用,部署不需要也行)
 pytest==8.3.4

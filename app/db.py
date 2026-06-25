@@ -1,39 +1,35 @@
-"""Postgres 連線、建表、seed。
+"""Postgres 連線池、建表。
 
 自用工具:啟動時跑一次建表 SQL(IF NOT EXISTS),不另外導入 Alembic。
 """
-import os
 from contextlib import contextmanager
+from pathlib import Path
 
 import psycopg2
 import psycopg2.extras
 from psycopg2.pool import ThreadedConnectionPool
 
-import config
+from app.settings import settings
 
 _pool: ThreadedConnectionPool | None = None
+SCHEMA_PATH = Path(__file__).parent / "sql" / "schema.sql"
 
 
 def init_pool() -> None:
     """建立連線池並確保資料表存在。"""
     global _pool
-    if not config.DATABASE_URL:
+    if not settings.database_url:
         raise RuntimeError("DATABASE_URL 尚未設定")
-    # maxconn 需 >= FastAPI 同步端點的執行緒併發數,否則高併發時 getconn
-    # 會丟 PoolError。可用 DB_MAX_CONN 覆蓋。
-    max_conn = int(os.environ.get("DB_MAX_CONN", "40"))
-    _pool = ThreadedConnectionPool(minconn=1, maxconn=max_conn, dsn=config.DATABASE_URL)
+    _pool = ThreadedConnectionPool(
+        minconn=1, maxconn=settings.db_max_conn, dsn=settings.database_url
+    )
     _create_tables()
 
 
 def _create_tables() -> None:
-    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
-    with open(schema_path, "r", encoding="utf-8") as f:
-        ddl = f.read()
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(ddl)
-        conn.commit()
+    ddl = SCHEMA_PATH.read_text(encoding="utf-8")
+    with get_cursor(commit=True) as cur:
+        cur.execute(ddl)
 
 
 @contextmanager
