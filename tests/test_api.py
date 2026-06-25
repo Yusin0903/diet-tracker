@@ -19,6 +19,7 @@ pytestmark = pytest.mark.skipif(
 def client():
     from app.settings import settings
     settings.invite_codes_raw = "testcode"  # 測試用邀請碼
+    settings.secret_key = settings.secret_key or "test-secret-key"  # 啟動檢查需要
     from fastapi.testclient import TestClient
     from app import db
     from app.main import app

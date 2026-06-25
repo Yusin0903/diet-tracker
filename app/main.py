@@ -12,12 +12,19 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db import init_pool
 from app.routers import analyze, auth, entries, foods, profile, summary
+from app.settings import settings
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # 啟動前先檢查關鍵密鑰已設定,避免帶著弱/空密鑰上線(token 可被偽造)。
+    if not settings.secret_key:
+        raise RuntimeError(
+            "SECRET_KEY 尚未設定。請用 `openssl rand -hex 32` 產生一組,"
+            "並以環境變數提供(正式環境務必設定且固定)。"
+        )
     init_pool()
     yield
 

@@ -32,7 +32,9 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
 
     # 認證
-    secret_key: str = "dev-insecure-change-me"
+    # 沒有預設值:必須由環境變數提供,否則啟動時直接失敗(見 main.lifespan),
+    # 避免帶著可被偽造 token 的弱密鑰上線。
+    secret_key: str = ""
     token_ttl_days: int = 30
 
     # 邀請碼(逗號分隔;沒有有效邀請碼就不能註冊)
