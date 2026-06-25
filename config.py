@@ -46,9 +46,10 @@ LOGIN_BLOCK_S = int(os.environ.get("LOGIN_BLOCK_S", "900"))    # 鎖 15 分鐘
 # 註:每日目標不再寫死,改由每位會員的身體數據估 TDEE 後計算,
 #     計算邏輯見 targets.py,設定流程見 /api/profile。
 
-# --- 初始常用食物(每位新會員註冊時各帶一份) -------------------------
+# --- 初始常用食物(每位新會員註冊時各帶一份,皆可自行刪除/修改) ------
+# 用「通用」的常見品項當起手範例,不綁定任何特定人的飲食習慣。
 SEED_FOODS = [
-    {"name": "雞胸便當(431cal 那款)", "calories": 431, "protein_g": 38.0},
-    {"name": "乳清一杯", "calories": 150, "protein_g": 27.0},
-    {"name": "6吋雞肉潛艇堡", "calories": 325, "protein_g": 20.0},
+    {"name": "白飯(一碗)", "calories": 280, "protein_g": 5.5},
+    {"name": "雞胸肉(100g)", "calories": 165, "protein_g": 31.0},
+    {"name": "乳清蛋白(一匙)", "calories": 120, "protein_g": 24.0},
 ]
