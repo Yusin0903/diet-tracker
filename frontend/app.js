@@ -306,7 +306,7 @@ async function handlePhoto(file) {
   if (!file) return;
   const url = URL.createObjectURL(file);
   openModal(
-    "拍照辨識",
+    "辨識食物照片",
     `<img class="preview-img" src="${url}" alt="預覽" />
      <div class="analyzing"><div class="spinner"></div>Gemini 辨識中…</div>`
   );

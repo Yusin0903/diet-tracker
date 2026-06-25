@@ -117,7 +117,7 @@
     <!-- 記錄入口 -->
     <section class="actions">
       <button class="action" id="act-photo">
-        <span class="action-icon">📷</span><span>拍照辨識</span>
+        <span class="action-icon">📷</span><span>拍照/選圖</span>
       </button>
       <button class="action" id="act-manual">
         <span class="action-icon">✏️</span><span>手動輸入</span>
@@ -126,7 +126,8 @@
         <span class="action-icon">⭐</span><span>常用食物</span>
       </button>
     </section>
-    <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+    <!-- 不加 capture:點下去跳系統選單(相機 / 相簿 / 檔案),可拍照也可選圖 -->
+    <input id="camera-input" type="file" accept="image/*" hidden />
 
     <!-- 今日記錄 -->
     <section class="list-section">
