@@ -259,10 +259,15 @@ function confirmForm(prefill, source) {
   return `
     <label class="field"><span>名稱</span>
       <input id="m-name" type="text" value="${escapeAttr(prefill.name || "")}" /></label>
-    <label class="field"><span>熱量 (kcal)</span>
-      <input id="m-cal" type="number" inputmode="numeric" value="${prefill.calories ?? ""}" /></label>
-    <label class="field"><span>蛋白質 (g)</span>
-      <input id="m-pro" type="number" inputmode="decimal" step="0.1" value="${prefill.protein_g ?? ""}" /></label>
+    <div class="grid2">
+      <label class="field"><span>熱量 (kcal/份)</span>
+        <input id="m-cal" type="number" inputmode="numeric" value="${prefill.calories ?? ""}" /></label>
+      <label class="field"><span>蛋白質 (g/份)</span>
+        <input id="m-pro" type="number" inputmode="decimal" step="0.1" value="${prefill.protein_g ?? ""}" /></label>
+    </div>
+    <label class="field"><span>份數</span>
+      <input id="m-serv" type="number" inputmode="decimal" step="0.5" min="0" value="1" /></label>
+    <div class="total-preview" id="m-total" hidden></div>
     <label class="field"><span>備註(可選)</span>
       <input id="m-note" type="text" placeholder="" /></label>
     <button class="btn-primary" id="m-save">確認記錄</button>
@@ -270,19 +275,40 @@ function confirmForm(prefill, source) {
 }
 
 function bindConfirm() {
+  const servEl = document.getElementById("m-serv"); // 條碼結果表單沒有份數,改用克數
+  const totalEl = document.getElementById("m-total");
+
+  const recalc = () => {
+    if (!servEl || !totalEl) return;
+    const cal = parseFloat($("m-cal").value);
+    const pro = parseFloat($("m-pro").value);
+    const serv = parseFloat(servEl.value);
+    if (!isNaN(cal) && !isNaN(serv) && serv > 0 && serv !== 1) {
+      const tp = isNaN(pro) ? "?" : +(pro * serv).toFixed(1);
+      totalEl.textContent = `總計 ${Math.round(cal * serv)} kcal · ${tp} g 蛋白(${serv} 份)`;
+      totalEl.hidden = false;
+    } else {
+      totalEl.hidden = true;
+    }
+  };
+  if (servEl) ["m-cal", "m-pro", "m-serv"].forEach((id) => $(id).addEventListener("input", recalc));
+  recalc();
+
   $("m-save").addEventListener("click", async () => {
     const name = $("m-name").value.trim();
-    const calories = parseInt($("m-cal").value, 10);
-    const protein_g = parseFloat($("m-pro").value);
-    if (!name || isNaN(calories) || isNaN(protein_g)) {
+    const calPer = parseInt($("m-cal").value, 10);
+    const proPer = parseFloat($("m-pro").value);
+    if (!name || isNaN(calPer) || isNaN(proPer)) {
       toast("請填完整名稱與數值", true);
       return;
     }
+    const serv = servEl ? parseFloat(servEl.value) : 1;
+    const mult = !servEl || isNaN(serv) || serv <= 0 ? 1 : serv;
     try {
       await createEntry({
         name,
-        calories,
-        protein_g,
+        calories: Math.round(calPer * mult),
+        protein_g: +(proPer * mult).toFixed(1),
         source: $("m-source").value,
         note: $("m-note").value.trim() || null,
       });
@@ -469,11 +495,31 @@ function stopScan() {
   }
 }
 
+// 盡量請相機開「連續自動對焦」,並讓畫面解析度高一點(小條碼較好辨識)。
+function tuneCamera(stream) {
+  try {
+    const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
+    if (!track || !track.getCapabilities) return;
+    const caps = track.getCapabilities();
+    const advanced = [];
+    if (caps.focusMode && caps.focusMode.includes("continuous"))
+      advanced.push({ focusMode: "continuous" });
+    if (advanced.length) track.applyConstraints({ advanced }).catch(() => {});
+  } catch (_) {}
+}
+
 async function openScan() {
   openModal(
     "掃條碼",
-    `<video id="scan-video" class="scan-video" playsinline muted autoplay></video>
-     <p class="items-hint">把商品條碼對準鏡頭,辨識到會自動帶出營養。</p>
+    `<div class="scanbox">
+       <video id="scan-video" class="scan-video" playsinline muted autoplay></video>
+       <div class="scan-frame" aria-hidden="true">
+         <span class="c tl"></span><span class="c tr"></span>
+         <span class="c bl"></span><span class="c br"></span>
+         <div class="scan-laser"></div>
+       </div>
+     </div>
+     <p class="items-hint scan-hint">把條碼對準框內,辨識到會自動帶出營養</p>
      <button class="ghost-btn" id="scan-manual" style="width:100%;padding:11px">改用手動輸入條碼</button>`
   );
   $("scan-manual").addEventListener("click", () => {
@@ -490,10 +536,15 @@ async function openScan() {
   if ("BarcodeDetector" in window) {
     try {
       scanStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       });
       video.srcObject = scanStream;
       await video.play().catch(() => {});
+      tuneCamera(scanStream);
       const detector = new BarcodeDetector({
         formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"],
       });
@@ -521,13 +572,21 @@ async function openScan() {
     };
     try {
       await zxingReader.decodeFromConstraints(
-        { video: { facingMode: { ideal: "environment" } } },
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         video,
         cb
       );
     } catch (_) {
       await zxingReader.decodeFromVideoDevice(null, video, cb); // 退而求其次:預設鏡頭
     }
+    // ZXing 自己管理 stream;啟動後抓 video 上的 stream 來請求連續對焦
+    setTimeout(() => tuneCamera(video.srcObject), 600);
   } catch (_) {
     openManualBarcode("無法啟動掃描(相機權限被拒或不支援),請手動輸入條碼:");
   }
