@@ -413,6 +413,19 @@ async function openFavorites() {
 const OFF_FIELDS = "product_name,brands,nutriments,serving_quantity,serving_size";
 let scanStream = null;
 let scanTimer = null;
+let zxingReader = null;
+
+// 載入在地化的 ZXing(只在沒有原生 BarcodeDetector 時用,例如 iOS Safari)。
+function ensureZXing() {
+  if (window.ZXing) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "/vendor/zxing.min.js";
+    s.onload = () => resolve(!!window.ZXing);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
 
 // 向 Open Food Facts 查條碼(前端直接打,公開資料、免金鑰)。查不到回 null。
 async function lookupBarcode(code) {
@@ -444,6 +457,12 @@ function stopScan() {
     clearTimeout(scanTimer);
     scanTimer = null;
   }
+  if (zxingReader) {
+    try {
+      zxingReader.reset();
+    } catch (_) {}
+    zxingReader = null;
+  }
   if (scanStream) {
     scanStream.getTracks().forEach((t) => t.stop());
     scanStream = null;
@@ -451,14 +470,9 @@ function stopScan() {
 }
 
 async function openScan() {
-  // 不支援即時掃描的瀏覽器(如部分 iOS)→ 退回手動輸入條碼
-  if (!("BarcodeDetector" in window)) {
-    openManualBarcode("此瀏覽器不支援即時掃描,請手動輸入條碼數字:");
-    return;
-  }
   openModal(
     "掃條碼",
-    `<video id="scan-video" class="scan-video" playsinline muted></video>
+    `<video id="scan-video" class="scan-video" playsinline muted autoplay></video>
      <p class="items-hint">把商品條碼對準鏡頭,辨識到會自動帶出營養。</p>
      <button class="ghost-btn" id="scan-manual" style="width:100%;padding:11px">改用手動輸入條碼</button>`
   );
@@ -466,44 +480,57 @@ async function openScan() {
     stopScan();
     openManualBarcode();
   });
-
-  try {
-    scanStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-    });
-  } catch (e) {
-    openManualBarcode("無法開啟相機(權限被拒?),請手動輸入條碼:");
-    return;
-  }
   const video = $("scan-video");
-  if (!video) {
+  const onHit = (code) => {
     stopScan();
-    return;
-  }
-  video.srcObject = scanStream;
-  try {
-    await video.play();
-  } catch (_) {}
-
-  const detector = new BarcodeDetector({
-    formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"],
-  });
-  const tick = async () => {
-    if (!scanStream) return; // 已關閉
-    try {
-      const codes = await detector.detect(video);
-      if (codes && codes.length) {
-        const code = codes[0].rawValue;
-        stopScan();
-        onBarcode(code);
-        return;
-      }
-    } catch (_) {
-      // 偶發辨識錯誤,忽略繼續掃
-    }
-    scanTimer = setTimeout(tick, 350);
+    onBarcode(code);
   };
-  tick();
+
+  // 路徑 A:原生 BarcodeDetector(Android Chrome 等,最省電)
+  if ("BarcodeDetector" in window) {
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      video.srcObject = scanStream;
+      await video.play().catch(() => {});
+      const detector = new BarcodeDetector({
+        formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"],
+      });
+      const tick = async () => {
+        if (!scanStream) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes && codes.length) return onHit(codes[0].rawValue);
+        } catch (_) {}
+        scanTimer = setTimeout(tick, 350);
+      };
+      tick();
+      return;
+    } catch (_) {
+      stopScan(); // 落到路徑 B 或手動
+    }
+  }
+
+  // 路徑 B:ZXing 純 JS 解碼(iOS Safari 等沒有 BarcodeDetector 的瀏覽器)
+  try {
+    if (!(await ensureZXing())) throw new Error("zxing load failed");
+    zxingReader = new ZXing.BrowserMultiFormatReader();
+    const cb = (result) => {
+      if (result) onHit(result.getText());
+    };
+    try {
+      await zxingReader.decodeFromConstraints(
+        { video: { facingMode: { ideal: "environment" } } },
+        video,
+        cb
+      );
+    } catch (_) {
+      await zxingReader.decodeFromVideoDevice(null, video, cb); // 退而求其次:預設鏡頭
+    }
+  } catch (_) {
+    openManualBarcode("無法啟動掃描(相機權限被拒或不支援),請手動輸入條碼:");
+  }
 }
 
 function openManualBarcode(hint) {
