@@ -158,6 +158,49 @@ def test_user_isolation(client):
 
 
 # ---------- 時區 ----------
+def test_entry_edit(client):
+    tok = _register(client, "editor").json()["token"]
+    h = _auth(tok)
+    eid = client.post("/api/entries", headers=h, json={
+        "name": "便當", "calories": 600, "protein_g": 30, "source": "manual"}).json()["id"]
+    r = client.put(f"/api/entries/{eid}", headers=h, json={
+        "name": "雞腿便當", "calories": 720, "protein_g": 34, "note": "加蛋"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "雞腿便當"
+    s = client.get("/api/summary", headers=h).json()
+    assert s["consumed"]["calories"] == 720
+    # 別人改不到
+    tok2 = _register(client, "editor2").json()["token"]
+    r2 = client.put(f"/api/entries/{eid}", headers=_auth(tok2), json={
+        "name": "x", "calories": 1, "protein_g": 0})
+    assert r2.status_code == 404
+
+
+def test_recipes_crud_and_isolation(client):
+    tok = _register(client, "cook").json()["token"]
+    h = _auth(tok)
+    assert client.get("/api/recipes", headers=h).json() == []
+    rid = client.post("/api/recipes", headers=h, json={
+        "name": "雞胸蓋飯", "calories": 520, "protein_g": 48, "servings": 1,
+        "ingredients": "雞胸 200g\n白飯 1 碗", "steps": "煎熟\n鋪上"}).json()["id"]
+    lst = client.get("/api/recipes", headers=h).json()
+    assert len(lst) == 1 and lst[0]["name"] == "雞胸蓋飯"
+    # 更新
+    up = client.put(f"/api/recipes/{rid}", headers=h, json={
+        "name": "辣雞胸蓋飯", "calories": 540, "protein_g": 48,
+        "servings": 1, "ingredients": "雞胸 200g", "steps": "煎熟"})
+    assert up.status_code == 200 and up.json()["name"] == "辣雞胸蓋飯"
+    # 記一份到 entries
+    le = client.post("/api/entries", headers=h, json={
+        "name": "辣雞胸蓋飯", "calories": 540, "protein_g": 48, "source": "recipe"})
+    assert le.status_code == 200 and le.json()["source"] == "recipe"
+    # 跨使用者看不到也刪不掉
+    tok2 = _register(client, "cook2").json()["token"]
+    assert client.get("/api/recipes", headers=_auth(tok2)).json() == []
+    assert client.delete(f"/api/recipes/{rid}", headers=_auth(tok2)).status_code == 404
+    assert client.delete(f"/api/recipes/{rid}", headers=h).status_code == 200
+
+
 def test_timezone_param(client):
     tok = _register(client, "tz").json()["token"]
     h = _auth(tok)

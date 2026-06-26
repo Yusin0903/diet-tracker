@@ -1,5 +1,5 @@
 // Service worker:只快取靜態檔(殼),API 一律走網路。
-const CACHE = "diet-shell-v8";
+const CACHE = "diet-shell-v9";
 const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.json"];
 
 self.addEventListener("install", (e) => {

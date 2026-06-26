@@ -59,6 +59,9 @@
       </div>
     </header>
 
+    <!-- ===== 首頁 view ===== -->
+    <div id="view-home">
+
     <!-- HERO:吉祥物熱量 + 蛋白條 -->
     <section class="hero-mascot">
       <div class="mascot-card state-blue" id="cal-card">
@@ -141,6 +144,24 @@
       <ul id="entry-list" class="entry-list"></ul>
       <p id="empty-hint" class="empty-hint" hidden>還沒有記錄,從上面的入口開始吧。</p>
     </section>
+
+    </div><!-- /view-home -->
+
+    <!-- ===== 食譜 view ===== -->
+    <div id="view-recipes" hidden>
+      <div class="list-head">
+        <h2>我的食譜</h2>
+        <button class="pill-btn" id="recipe-add">＋ 新增食譜</button>
+      </div>
+      <div id="recipe-list" class="recipe-list"></div>
+      <p id="recipe-empty" class="empty-hint" hidden>還沒有食譜,點右上角「新增食譜」記第一道吧。</p>
+    </div>
+
+    <!-- 底部分頁 -->
+    <nav class="tabbar">
+      <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic">🏠</span>首頁</button>
+      <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic">📖</span>食譜</button>
+    </nav>
   </div>
 
   <!-- 通用 modal -->

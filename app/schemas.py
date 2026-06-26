@@ -19,8 +19,24 @@ class EntryIn(BaseModel):
     name: str = Field(..., min_length=1)
     calories: int = Field(..., ge=0)
     protein_g: float = Field(..., ge=0)
-    source: str = Field("manual")  # 'photo' | 'manual' | 'favorite'
+    source: str = Field("manual")  # 'photo' | 'manual' | 'favorite' | 'barcode' | 'recipe'
     note: Optional[str] = None
+
+
+class EntryEdit(BaseModel):
+    name: str = Field(..., min_length=1)
+    calories: int = Field(..., ge=0)
+    protein_g: float = Field(..., ge=0)
+    note: Optional[str] = None
+
+
+class RecipeIn(BaseModel):
+    name: str = Field(..., min_length=1)
+    servings: Optional[float] = Field(None, ge=0)
+    calories: Optional[int] = Field(None, ge=0)      # 每份熱量
+    protein_g: Optional[float] = Field(None, ge=0)   # 每份蛋白
+    ingredients: Optional[str] = None
+    steps: Optional[str] = None
 
 
 class FoodIn(BaseModel):

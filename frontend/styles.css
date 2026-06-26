@@ -278,6 +278,98 @@ body {
 .pf-tdee b { font-size: 26px; color: var(--accent); font-weight: 800; }
 .pf-detail { font-size: 13px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; font-variant-numeric: tabular-nums; }
 
+/* ---------- 底部分頁 ---------- */
+#app-screen { padding-bottom: 96px; }
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  display: flex; justify-content: center; gap: 8px;
+  padding: 9px 12px calc(9px + env(safe-area-inset-bottom));
+  background: rgba(10, 11, 15, .85); backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+}
+.tabbar-btn {
+  flex: 1; max-width: 170px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 5px; background: none; border: none; cursor: pointer; font-family: var(--sans);
+  color: var(--text-dim); font-size: 11px; font-weight: 700; transition: color .15s;
+}
+.tabbar-ic { font-size: 21px; filter: grayscale(.5) opacity(.65); transition: .15s; }
+.tabbar-btn.active { color: var(--text); }
+.tabbar-btn.active .tabbar-ic { filter: none; transform: translateY(-1px); }
+
+.pill-btn {
+  background: var(--primary); color: var(--on-primary); border: none;
+  padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 800;
+  cursor: pointer; font-family: var(--sans); transition: transform .12s;
+}
+.pill-btn:active { transform: scale(.96); }
+
+/* 記錄列改成可點(編輯/刪除),右側 chevron */
+.entry { cursor: pointer; transition: filter .15s; }
+.entry:hover { filter: brightness(1.12); }
+.entry-chev { color: var(--faint); font-size: 20px; font-weight: 700; flex: none; }
+
+/* 危險動作按鈕 */
+.btn-danger {
+  width: 100%; padding: 13px; margin-top: 10px; background: transparent;
+  color: var(--bad); border: 1.5px solid rgba(251,113,133,.4); border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 700; cursor: pointer; font-family: var(--sans); transition: background .15s;
+}
+.btn-danger:hover { background: rgba(251,113,133,.12); }
+
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 10px; }
+.field textarea {
+  width: 100%; padding: 13px 14px; background: var(--surface-2); border: 1.5px solid transparent;
+  border-radius: var(--radius-sm); color: var(--text); font-size: 15px; font-family: var(--sans);
+  outline: none; resize: vertical; line-height: 1.55; transition: border-color .15s, background .15s;
+}
+.field textarea:focus { border-color: var(--accent); background: #20242f; }
+
+/* ---------- 食譜 ---------- */
+.recipe-list { display: flex; flex-direction: column; gap: 10px; }
+.recipe-card {
+  display: flex; align-items: center; gap: 12px; background: var(--surface);
+  border-radius: var(--radius-sm); padding: 16px; cursor: pointer; box-shadow: var(--shadow);
+  transition: filter .15s, transform .12s;
+}
+.recipe-card:hover { filter: brightness(1.15); }
+.recipe-card:active { transform: scale(.99); }
+.recipe-card-main { flex: 1; min-width: 0; }
+.recipe-name { font-size: 16px; font-weight: 800; }
+.recipe-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
+.recipe-meta span { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+.recipe-detail { padding-top: 2px; }
+.rd-title { font-size: 24px; font-weight: 800; margin-bottom: 14px; line-height: 1.2; }
+.rd-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.rd-chips span {
+  background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 600;
+  padding: 7px 13px; border-radius: 999px; font-variant-numeric: tabular-nums;
+}
+.rd-h {
+  font-size: 12px; font-weight: 800; color: var(--text-dim); letter-spacing: 1.5px;
+  margin: 22px 0 12px;
+}
+.rd-ing { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.rd-ing li { position: relative; padding-left: 20px; font-size: 15px; line-height: 1.45; }
+.rd-ing li::before {
+  content: ""; position: absolute; left: 4px; top: 8px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent);
+}
+.rd-steps { list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 13px; }
+.rd-steps li { position: relative; padding-left: 40px; font-size: 15px; line-height: 1.5; min-height: 26px; }
+.rd-steps li::before {
+  counter-increment: step; content: counter(step); position: absolute; left: 0; top: -1px;
+  width: 27px; height: 27px; border-radius: 50%; background: var(--primary); color: var(--on-primary);
+  font-size: 13px; font-weight: 800; display: grid; place-items: center;
+}
+.rd-actions { margin-top: 26px; }
+.rd-row { display: flex; gap: 10px; margin-top: 10px; }
+.rd-row .ghost-btn {
+  flex: 1; border: 1.5px solid var(--line); padding: 12px; border-radius: var(--radius-sm);
+  font-weight: 700; color: var(--text);
+}
+.rd-row .btn-danger { flex: 1; margin-top: 0; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; bottom: calc(26px + env(safe-area-inset-bottom)); left: 50%;

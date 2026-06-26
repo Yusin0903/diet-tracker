@@ -51,3 +51,18 @@ CREATE TABLE IF NOT EXISTS foods (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (user_id, name)
 );
+
+-- 自己記的食譜,每位會員各自一份
+CREATE TABLE IF NOT EXISTS recipes (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    servings     NUMERIC(5,1),            -- 整份食譜產出幾份(可選)
+    calories     INTEGER,                 -- 每份熱量(可選)
+    protein_g    NUMERIC(6,1),            -- 每份蛋白(可選)
+    ingredients  TEXT,                    -- 食材,一行一項
+    steps        TEXT,                    -- 步驟,一行一步
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes (user_id, updated_at DESC);

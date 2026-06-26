@@ -98,6 +98,7 @@ function showApp() {
   authScreen.hidden = true;
   appScreen.hidden = false;
   $("who").textContent = state.username;
+  showView("home");
   refresh();
 }
 
@@ -195,7 +196,7 @@ async function loadSummary() {
 }
 
 // ---------- Entries ----------
-const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐", barcode: "🏷️" };
+const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐", barcode: "🏷️", recipe: "📖" };
 
 async function loadEntries() {
   const entries = await api(tzq("/api/entries"));
@@ -220,18 +221,60 @@ async function loadEntries() {
         <div class="entry-cal">${e.calories}</div>
         <div class="entry-pro">${e.protein_g}g</div>
       </div>
-      <button class="entry-del" title="刪除">✕</button>`;
+      <span class="entry-chev">›</span>`;
     li.querySelector(".entry-name").textContent = e.name;
-    li.querySelector(".entry-del").addEventListener("click", async () => {
-      try {
-        await api(`/api/entries/${e.id}`, { method: "DELETE" });
-        await refresh();
-      } catch (err) {
-        toast(err.message, true);
-      }
-    });
+    li.addEventListener("click", () => openEntryEdit(e)); // 點整列 → 編輯/刪除
     list.appendChild(li);
   }
+}
+
+// 點記錄 → 編輯欄位或刪除(取代以前直接的 ✕)
+function openEntryEdit(e) {
+  openModal(
+    "編輯記錄",
+    `<label class="field"><span>名稱</span>
+       <input id="e-name" type="text" value="${escapeAttr(e.name)}" /></label>
+     <div class="grid2">
+       <label class="field"><span>熱量 (kcal)</span>
+         <input id="e-cal" type="number" inputmode="numeric" value="${e.calories}" /></label>
+       <label class="field"><span>蛋白質 (g)</span>
+         <input id="e-pro" type="number" inputmode="decimal" step="0.1" value="${e.protein_g}" /></label>
+     </div>
+     <label class="field"><span>備註(可選)</span>
+       <input id="e-note" type="text" value="${escapeAttr(e.note || "")}" /></label>
+     <button class="btn-primary" id="e-save">儲存</button>
+     <button class="btn-danger" id="e-del">刪除這筆記錄</button>`
+  );
+  $("e-save").addEventListener("click", async () => {
+    const name = $("e-name").value.trim();
+    const calories = parseInt($("e-cal").value, 10);
+    const protein_g = parseFloat($("e-pro").value);
+    if (!name || isNaN(calories) || isNaN(protein_g)) {
+      toast("請填完整名稱與數值", true);
+      return;
+    }
+    try {
+      await api(tzq(`/api/entries/${e.id}`), {
+        method: "PUT",
+        body: { name, calories, protein_g, note: $("e-note").value.trim() || null },
+      });
+      closeModal();
+      await refresh();
+      toast("已更新 ✓");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+  $("e-del").addEventListener("click", async () => {
+    try {
+      await api(`/api/entries/${e.id}`, { method: "DELETE" });
+      closeModal();
+      await refresh();
+      toast("已刪除");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
 }
 
 async function createEntry(payload) {
@@ -841,6 +884,157 @@ function floatOrNull(v) {
 }
 
 // ========================================================================
+// 分頁切換(首頁 / 食譜)
+// ========================================================================
+function showView(name) {
+  $("view-home").hidden = name !== "home";
+  $("view-recipes").hidden = name !== "recipes";
+  document
+    .querySelectorAll(".tabbar-btn")
+    .forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  if (name === "recipes") loadRecipes();
+}
+
+// ========================================================================
+// 食譜
+// ========================================================================
+const splitLines = (s) =>
+  (s || "").split("\n").map((x) => x.trim()).filter(Boolean);
+
+async function loadRecipes() {
+  const list = $("recipe-list");
+  list.innerHTML = `<div class="analyzing"><div class="spinner"></div></div>`;
+  try {
+    const recipes = await api("/api/recipes");
+    list.innerHTML = "";
+    $("recipe-empty").hidden = recipes.length > 0;
+    for (const r of recipes) {
+      const meta = [];
+      if (r.calories != null) meta.push(`${r.calories} kcal/份`);
+      if (r.protein_g != null) meta.push(`${r.protein_g}g 蛋白`);
+      if (r.servings != null) meta.push(`${r.servings} 份`);
+      const card = document.createElement("div");
+      card.className = "recipe-card";
+      card.innerHTML = `
+        <div class="recipe-card-main">
+          <div class="recipe-name"></div>
+          <div class="recipe-meta">${meta.map((m) => `<span>${escapeHtml(m)}</span>`).join("")}</div>
+        </div>
+        <span class="entry-chev">›</span>`;
+      card.querySelector(".recipe-name").textContent = r.name;
+      card.addEventListener("click", () => openRecipeDetail(r));
+      list.appendChild(card);
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function openRecipeDetail(r) {
+  const ing = splitLines(r.ingredients);
+  const steps = splitLines(r.steps);
+  const chips = [];
+  if (r.calories != null) chips.push(`🔥 ${r.calories} kcal/份`);
+  if (r.protein_g != null) chips.push(`💪 ${r.protein_g}g 蛋白`);
+  if (r.servings != null) chips.push(`🍽️ ${r.servings} 份`);
+  openModal(
+    "",
+    `<div class="recipe-detail">
+       <h2 class="rd-title"></h2>
+       ${chips.length ? `<div class="rd-chips">${chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("")}</div>` : ""}
+       ${ing.length ? `<h3 class="rd-h">食材</h3><ul class="rd-ing">${ing.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
+       ${steps.length ? `<h3 class="rd-h">步驟</h3><ol class="rd-steps">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : ""}
+       <div class="rd-actions">
+         ${r.calories != null ? `<button class="btn-primary" id="rd-log">記一份到今天</button>` : ""}
+         <div class="rd-row">
+           <button class="ghost-btn" id="rd-edit">編輯</button>
+           <button class="btn-danger" id="rd-del">刪除</button>
+         </div>
+       </div>
+     </div>`
+  );
+  $("modal-body").querySelector(".rd-title").textContent = r.name;
+  const logBtn = $("rd-log");
+  if (logBtn)
+    logBtn.addEventListener("click", async () => {
+      try {
+        await api(tzq("/api/entries"), {
+          method: "POST",
+          body: {
+            name: r.name,
+            calories: r.calories,
+            protein_g: r.protein_g || 0,
+            source: "recipe",
+          },
+        });
+        closeModal();
+        await refresh();
+        showView("home");
+        toast("已記一份 ✓");
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  $("rd-edit").addEventListener("click", () => openRecipeForm(r));
+  $("rd-del").addEventListener("click", async () => {
+    try {
+      await api(`/api/recipes/${r.id}`, { method: "DELETE" });
+      closeModal();
+      loadRecipes();
+      toast("已刪除");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+function openRecipeForm(r) {
+  const e = r || {};
+  openModal(
+    r ? "編輯食譜" : "新增食譜",
+    `<label class="field"><span>食譜名稱</span>
+       <input id="rf-name" type="text" value="${escapeAttr(e.name || "")}" placeholder="例如:雞胸蓋飯" /></label>
+     <div class="grid3">
+       <label class="field"><span>每份熱量</span>
+         <input id="rf-cal" type="number" inputmode="numeric" value="${e.calories ?? ""}" placeholder="kcal" /></label>
+       <label class="field"><span>每份蛋白</span>
+         <input id="rf-pro" type="number" inputmode="decimal" step="0.1" value="${e.protein_g ?? ""}" placeholder="g" /></label>
+       <label class="field"><span>產出份數</span>
+         <input id="rf-serv" type="number" inputmode="decimal" step="0.5" value="${e.servings ?? ""}" placeholder="份" /></label>
+     </div>
+     <label class="field"><span>食材(一行一項)</span>
+       <textarea id="rf-ing" rows="4" placeholder="雞胸肉 200g&#10;白飯 1 碗&#10;醬油 1 匙">${escapeHtml(e.ingredients || "")}</textarea></label>
+     <label class="field"><span>步驟(一行一步)</span>
+       <textarea id="rf-steps" rows="5" placeholder="雞胸切片醃 10 分鐘&#10;下鍋煎熟&#10;鋪在白飯上、淋醬">${escapeHtml(e.steps || "")}</textarea></label>
+     <button class="btn-primary" id="rf-save">${r ? "儲存變更" : "建立食譜"}</button>`
+  );
+  $("rf-save").addEventListener("click", async () => {
+    const name = $("rf-name").value.trim();
+    if (!name) {
+      toast("請填食譜名稱", true);
+      return;
+    }
+    const body = {
+      name,
+      calories: intOrNull($("rf-cal").value),
+      protein_g: floatOrNull($("rf-pro").value),
+      servings: floatOrNull($("rf-serv").value),
+      ingredients: $("rf-ing").value.trim() || null,
+      steps: $("rf-steps").value.trim() || null,
+    };
+    try {
+      if (r) await api(`/api/recipes/${r.id}`, { method: "PUT", body });
+      else await api("/api/recipes", { method: "POST", body });
+      closeModal();
+      loadRecipes();
+      toast(r ? "已更新 ✓" : "已新增 ✓");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// ========================================================================
 // Utils
 // ========================================================================
 let toastTimer;
@@ -874,6 +1068,10 @@ function setupApp() {
     handlePhoto(e.target.files[0]);
     e.target.value = "";
   });
+  document.querySelectorAll(".tabbar-btn").forEach((b) =>
+    b.addEventListener("click", () => showView(b.dataset.view))
+  );
+  $("recipe-add").addEventListener("click", () => openRecipeForm(null));
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {
     if (e.target === $("modal")) closeModal();
