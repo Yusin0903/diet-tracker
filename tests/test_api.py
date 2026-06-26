@@ -83,6 +83,24 @@ def test_seed_foods_present(client):
 
 
 # ---------- entries + summary ----------
+def test_barcode_source_accepted(client):
+    tok = _register(client, "barcoder").json()["token"]
+    h = _auth(tok)
+    r = client.post("/api/entries", headers=h, json={
+        "name": "可樂 330ml", "calories": 139, "protein_g": 0,
+        "source": "barcode"})
+    assert r.status_code == 200
+    assert r.json()["source"] == "barcode"
+
+
+def test_bad_source_rejected(client):
+    tok = _register(client, "badsrc").json()["token"]
+    h = _auth(tok)
+    r = client.post("/api/entries", headers=h, json={
+        "name": "x", "calories": 1, "protein_g": 0, "source": "telepathy"})
+    assert r.status_code == 400
+
+
 def test_entries_update_summary(client):
     tok = _register(client, "eater").json()["token"]
     h = _auth(tok)

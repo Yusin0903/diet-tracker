@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/entries", tags=["entries"])
 def create_entry(
     body: EntryIn, tz: Optional[str] = None, user: dict = Depends(current_user)
 ):
-    if body.source not in ("photo", "manual", "favorite"):
+    if body.source not in ("photo", "manual", "favorite", "barcode"):
         raise HTTPException(status_code=400, detail="source 不合法")
     with get_cursor(commit=True) as cur:
         cur.execute(

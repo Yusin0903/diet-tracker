@@ -2,7 +2,7 @@
 
 **English** · [繁體中文](README.zh-TW.md)
 
-A diet-logging tool built around one core value: **log fast + auto-total against your daily goals**. Snap a food photo and let Gemini estimate calories/protein, type them in manually, or one-tap a favorite. The home screen shows at a glance "how much you've eaten today / how much room is left."
+A diet-logging tool built around one core value: **log fast + auto-total against your daily goals**. Snap a food photo and let Gemini estimate calories/protein, scan a product barcode (looked up via Open Food Facts), type values in manually, or one-tap a favorite. The home screen shows at a glance "how much you've eaten today / how much room is left."
 
 It has a **member system**: an **invite code** is required to register (no open sign-up), and each member's data is fully isolated.
 
