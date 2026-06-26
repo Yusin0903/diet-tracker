@@ -40,13 +40,26 @@ def _get_client() -> genai.Client:
     return _client
 
 
-def analyze_food_image(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
+def build_prompt(hint: str | None = None) -> str:
+    """組 prompt;使用者有給文字補充時併入,提高辨識準確度。"""
+    prompt = ANALYZE_PROMPT
+    if hint and hint.strip():
+        prompt += (
+            "\n\n使用者補充說明(很重要,請優先據此判斷食物種類,不要自行改成相似的東西):"
+            f"\n{hint.strip()}"
+        )
+    return prompt
+
+
+def analyze_food_image(
+    image_bytes: bytes, mime_type: str = "image/jpeg", hint: str | None = None
+) -> dict:
     client = _get_client()
     resp = client.models.generate_content(
         model=settings.gemini_model,
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            ANALYZE_PROMPT,
+            build_prompt(hint),
         ],
         config=types.GenerateContentConfig(
             temperature=0.2,

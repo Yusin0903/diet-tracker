@@ -325,21 +325,64 @@ function openManual() {
 }
 
 // ---------- 拍照分析 ----------
+let _photoFile = null;
+let _photoUrl = null;
+
+// 先讓使用者選「拍照」或「從相簿選」—— 拍照才會強制開相機(capture),
+// 相簿/檔案則不帶 capture。這樣 Android、iOS 兩邊都能用。
 function openPhoto() {
-  $("camera-input").click();
+  openModal(
+    "新增照片",
+    `<p class="items-hint">要用相機拍,還是從相簿 / 檔案選一張?</p>
+     <div class="choice-row">
+       <button class="choice-btn" id="ph-cam"><span class="choice-ic">📷</span>拍照</button>
+       <button class="choice-btn" id="ph-lib"><span class="choice-ic">🖼️</span>從相簿選</button>
+     </div>`
+  );
+  $("ph-cam").addEventListener("click", () => pickPhoto(true));
+  $("ph-lib").addEventListener("click", () => pickPhoto(false));
 }
 
-async function handlePhoto(file) {
+function pickPhoto(useCamera) {
+  const input = $("camera-input");
+  if (useCamera) input.setAttribute("capture", "environment");
+  else input.removeAttribute("capture");
+  input.value = "";
+  input.click();
+}
+
+function handlePhoto(file) {
   if (!file) return;
-  const url = URL.createObjectURL(file);
+  if (_photoUrl) URL.revokeObjectURL(_photoUrl);
+  _photoFile = file;
+  _photoUrl = URL.createObjectURL(file);
+  photoHintStep("");
+}
+
+// 辨識前可選填文字補充(例:油條),一起送給 Gemini,大幅降低認錯機率
+function photoHintStep(hint) {
   openModal(
     "辨識食物照片",
-    `<img class="preview-img" src="${url}" alt="預覽" />
+    `<img class="preview-img" src="${_photoUrl}" alt="預覽" />
+     <label class="field"><span>補充說明(可選,幫 AI 認得更準)</span>
+       <input id="ph-hint" type="text" value="${escapeAttr(hint || "")}"
+         placeholder="例如:油條、滷雞腿便當、無糖" /></label>
+     <button class="btn-primary" id="ph-go">開始辨識</button>`
+  );
+  $("ph-go").addEventListener("click", runAnalyze);
+}
+
+async function runAnalyze() {
+  const hint = $("ph-hint") ? $("ph-hint").value.trim() : "";
+  openModal(
+    "辨識食物照片",
+    `<img class="preview-img" src="${_photoUrl}" alt="預覽" />
      <div class="analyzing"><div class="spinner"></div>Gemini 辨識中…</div>`
   );
   try {
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", _photoFile);
+    if (hint) form.append("hint", hint);
     const result = await api("/api/analyze", { method: "POST", body: form, isForm: true });
     const itemsHtml =
       result.items && result.items.length
@@ -348,14 +391,18 @@ async function handlePhoto(file) {
             .join("、")} · 信心 ${escapeHtml(result.confidence || "")}</p>`
         : "";
     $("modal-body").innerHTML =
-      `<img class="preview-img" src="${url}" alt="預覽" />` +
+      `<img class="preview-img" src="${_photoUrl}" alt="預覽" />` +
       itemsHtml +
+      `<button class="ghost-btn redo-btn" id="ph-redo">辨識不準?加說明再試一次</button>` +
       confirmForm(result, "photo");
+    $("ph-redo").addEventListener("click", () => photoHintStep(hint));
     bindConfirm();
   } catch (err) {
     $("modal-body").innerHTML =
       `<p class="items-hint" style="color:var(--bad)">${escapeHtml(err.message)}</p>` +
+      `<button class="ghost-btn redo-btn" id="ph-redo">重試辨識</button>` +
       confirmForm({}, "manual");
+    $("ph-redo").addEventListener("click", () => photoHintStep(hint));
     bindConfirm();
   }
 }
