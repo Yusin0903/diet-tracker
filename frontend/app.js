@@ -195,7 +195,7 @@ async function loadSummary() {
 }
 
 // ---------- Entries ----------
-const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐" };
+const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐", barcode: "🏷️" };
 
 async function loadEntries() {
   const entries = await api(tzq("/api/entries"));
@@ -250,6 +250,7 @@ function openModal(title, html) {
   $("modal").hidden = false;
 }
 function closeModal() {
+  stopScan(); // 關閉 modal 時務必停掉相機
   $("modal").hidden = true;
   $("modal-body").innerHTML = "";
 }
@@ -404,6 +405,177 @@ async function openFavorites() {
   } catch (err) {
     toast(err.message, true);
   }
+}
+
+// ========================================================================
+// 掃條碼(相機即時掃 → 查 Open Food Facts → 確認份量再記)
+// ========================================================================
+const OFF_FIELDS = "product_name,brands,nutriments,serving_quantity,serving_size";
+let scanStream = null;
+let scanTimer = null;
+
+// 向 Open Food Facts 查條碼(前端直接打,公開資料、免金鑰)。查不到回 null。
+async function lookupBarcode(code) {
+  const url =
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("查詢失敗");
+  const data = await res.json();
+  if (data.status !== 1 || !data.product) return null;
+  const p = data.product;
+  const n = p.nutriments || {};
+  const num = (v) => {
+    const x = parseFloat(v);
+    return isNaN(x) ? null : x;
+  };
+  const brand = (p.brands || "").split(",")[0].trim();
+  const name = [brand, p.product_name].filter(Boolean).join(" ").trim() || "未知商品";
+  return {
+    barcode: code,
+    name,
+    cal100: num(n["energy-kcal_100g"]),
+    pro100: num(n["proteins_100g"]),
+    servingG: num(p.serving_quantity),
+  };
+}
+
+function stopScan() {
+  if (scanTimer) {
+    clearTimeout(scanTimer);
+    scanTimer = null;
+  }
+  if (scanStream) {
+    scanStream.getTracks().forEach((t) => t.stop());
+    scanStream = null;
+  }
+}
+
+async function openScan() {
+  // 不支援即時掃描的瀏覽器(如部分 iOS)→ 退回手動輸入條碼
+  if (!("BarcodeDetector" in window)) {
+    openManualBarcode("此瀏覽器不支援即時掃描,請手動輸入條碼數字:");
+    return;
+  }
+  openModal(
+    "掃條碼",
+    `<video id="scan-video" class="scan-video" playsinline muted></video>
+     <p class="items-hint">把商品條碼對準鏡頭,辨識到會自動帶出營養。</p>
+     <button class="ghost-btn" id="scan-manual" style="width:100%;padding:11px">改用手動輸入條碼</button>`
+  );
+  $("scan-manual").addEventListener("click", () => {
+    stopScan();
+    openManualBarcode();
+  });
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+    });
+  } catch (e) {
+    openManualBarcode("無法開啟相機(權限被拒?),請手動輸入條碼:");
+    return;
+  }
+  const video = $("scan-video");
+  if (!video) {
+    stopScan();
+    return;
+  }
+  video.srcObject = scanStream;
+  try {
+    await video.play();
+  } catch (_) {}
+
+  const detector = new BarcodeDetector({
+    formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"],
+  });
+  const tick = async () => {
+    if (!scanStream) return; // 已關閉
+    try {
+      const codes = await detector.detect(video);
+      if (codes && codes.length) {
+        const code = codes[0].rawValue;
+        stopScan();
+        onBarcode(code);
+        return;
+      }
+    } catch (_) {
+      // 偶發辨識錯誤,忽略繼續掃
+    }
+    scanTimer = setTimeout(tick, 350);
+  };
+  tick();
+}
+
+function openManualBarcode(hint) {
+  openModal(
+    "輸入條碼",
+    `${hint ? `<p class="items-hint">${escapeHtml(hint)}</p>` : ""}
+     <label class="field"><span>條碼數字</span>
+       <input id="bc-input" type="text" inputmode="numeric" placeholder="例如 4710…" /></label>
+     <button class="btn-primary" id="bc-go">查詢</button>`
+  );
+  $("bc-go").addEventListener("click", () => {
+    const code = $("bc-input").value.trim();
+    if (!code) {
+      toast("請輸入條碼", true);
+      return;
+    }
+    onBarcode(code);
+  });
+}
+
+async function onBarcode(code) {
+  openModal(
+    "查詢中…",
+    `<div class="analyzing"><div class="spinner"></div>查詢條碼 ${escapeHtml(code)}…</div>`
+  );
+  let prod = null;
+  try {
+    prod = await lookupBarcode(code);
+  } catch (_) {
+    // 網路或查詢錯誤,當作查不到處理
+  }
+  if (!prod) {
+    $("modal-title").textContent = "查不到商品";
+    $("modal-body").innerHTML =
+      `<p class="items-hint">Open Food Facts 查不到條碼 ${escapeHtml(code)},改手動輸入:</p>` +
+      confirmForm({}, "manual");
+    bindConfirm();
+    return;
+  }
+  showBarcodeResult(prod);
+}
+
+function showBarcodeResult(prod) {
+  const defG = prod.servingG || 100;
+  $("modal-title").textContent = "確認份量";
+  $("modal-body").innerHTML = `
+    <div class="fav-item" style="margin-bottom:14px">
+      <div class="fav-info">
+        <div class="fav-name">${escapeHtml(prod.name)}</div>
+        <div class="fav-macro">每 100g:${prod.cal100 ?? "?"} kcal · ${prod.pro100 ?? "?"} g 蛋白</div>
+      </div>
+    </div>
+    <label class="field"><span>份量 (g)</span>
+      <input id="bc-g" type="number" inputmode="decimal" value="${defG}" /></label>
+    <label class="field"><span>名稱</span>
+      <input id="m-name" type="text" value="${escapeAttr(prod.name)}" /></label>
+    <label class="field"><span>熱量 (kcal)</span>
+      <input id="m-cal" type="number" inputmode="numeric" /></label>
+    <label class="field"><span>蛋白質 (g)</span>
+      <input id="m-pro" type="number" inputmode="decimal" step="0.1" /></label>
+    <label class="field"><span>備註(可選)</span><input id="m-note" type="text" /></label>
+    <button class="btn-primary" id="m-save">確認記錄</button>
+    <input type="hidden" id="m-source" value="barcode" />`;
+
+  const recompute = () => {
+    const g = parseFloat($("bc-g").value);
+    if (prod.cal100 != null && !isNaN(g)) $("m-cal").value = Math.round((prod.cal100 * g) / 100);
+    if (prod.pro100 != null && !isNaN(g)) $("m-pro").value = +((prod.pro100 * g) / 100).toFixed(1);
+  };
+  recompute(); // 用預設份量先帶一次
+  $("bc-g").addEventListener("input", recompute);
+  bindConfirm();
 }
 
 // ========================================================================
@@ -562,6 +734,7 @@ function setupApp() {
   $("open-profile").addEventListener("click", openProfile);
   $("setup-cta").addEventListener("click", openProfile);
   $("act-photo").addEventListener("click", openPhoto);
+  $("act-scan").addEventListener("click", openScan);
   $("act-manual").addEventListener("click", openManual);
   $("act-fav").addEventListener("click", openFavorites);
   $("camera-input").addEventListener("change", (e) => {

@@ -183,7 +183,8 @@ body {
 }
 
 /* ---------- Actions ---------- */
-.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 26px; }
+.actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 26px; }
+.scan-video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; border-radius: 12px; margin-bottom: 14px; }
 .action {
   background: var(--bg-elev); border: 1px solid var(--line);
   border-radius: 14px; padding: 16px 8px; cursor: pointer;
