@@ -6,8 +6,9 @@
   --text: #f4f6fa;
   --text-dim: #98a2b3;
   --faint: #6b7484;
-  --primary: #eef2f8;       /* 主要 CTA(近白) */
-  --on-primary: #0b0d12;
+  --primary: #7c6cff;       /* 主要 CTA */
+  --on-primary: #ffffff;
+  --grad: linear-gradient(135deg, #8b6dff 0%, #5b8cff 100%);  /* 招牌漸層 */
   --accent: #8aa6ff;        /* 焦點 / 連結 */
   --good: #34d399;          /* 達標綠 */
   --warn: #fbbf24;          /* 不足橘 */
@@ -36,7 +37,7 @@ body {
   padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   /* 頂部一抹柔光,讓畫面有層次,不是死黑平面 */
   background:
-    radial-gradient(130% 70% at 50% -15%, rgba(138, 166, 255, .10), transparent 55%),
+    radial-gradient(130% 70% at 50% -15%, rgba(139, 109, 255, .16), transparent 55%),
     var(--bg);
   background-attachment: fixed;
 }
@@ -52,7 +53,8 @@ body {
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand h1 { font-size: 26px; letter-spacing: 3px; font-weight: 800; }
 .brand.small { font-weight: 700; letter-spacing: 1px; font-size: 17px; }
-.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 14px var(--good); }
+.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--grad); box-shadow: 0 0 14px rgba(124,108,255,.75); }
+.ver { font-size: 10px; font-weight: 800; color: #fff; background: var(--grad); padding: 1px 7px; border-radius: 999px; margin-left: 6px; letter-spacing: .5px; vertical-align: middle; }
 .brand-sub { color: var(--text-dim); margin: 10px 0 24px; font-size: 14px; }
 
 .tabs { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 999px; margin-bottom: 22px; }
@@ -61,7 +63,7 @@ body {
   background: transparent; color: var(--text-dim);
   font-size: 15px; font-weight: 700; cursor: pointer; transition: .18s; font-family: var(--sans);
 }
-.tab.active { background: var(--primary); color: var(--on-primary); }
+.tab.active { background: var(--grad); color: #fff; }
 
 .field { display: block; margin-bottom: 15px; }
 .field span { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 7px; font-weight: 500; }
@@ -73,7 +75,7 @@ body {
 .field input:focus { border-color: var(--accent); background: #20242f; }
 
 .btn-primary {
-  width: 100%; padding: 15px; margin-top: 6px; background: var(--primary); color: var(--on-primary);
+  width: 100%; padding: 15px; margin-top: 6px; background: var(--grad); color: #fff;
   border: none; border-radius: var(--radius-sm); font-size: 16px; font-weight: 800;
   cursor: pointer; transition: transform .12s, filter .15s; font-family: var(--sans);
 }
@@ -264,7 +266,7 @@ body {
 .fav-item .fav-info { flex: 1; min-width: 0; }
 .fav-item .fav-name { font-weight: 700; font-size: 15px; }
 .fav-item .fav-macro { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.fav-add { background: var(--primary); color: var(--on-primary); border: none; border-radius: 11px; padding: 9px 15px; font-weight: 800; cursor: pointer; font-family: var(--sans); flex: none; }
+.fav-add { background: var(--grad); color: #fff; border: none; border-radius: 11px; padding: 9px 15px; font-weight: 800; cursor: pointer; font-family: var(--sans); flex: none; }
 .fav-del { background: transparent; border: none; color: var(--faint); cursor: pointer; font-size: 16px; flex: none; }
 .divider { height: 1px; background: var(--line); margin: 18px 0; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
@@ -313,7 +315,7 @@ body {
 .tabbar-btn.active .tabbar-ic { filter: none; transform: translateY(-1px); }
 
 .pill-btn {
-  background: var(--primary); color: var(--on-primary); border: none;
+  background: var(--grad); color: #fff; border: none;
   padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 800;
   cursor: pointer; font-family: var(--sans); transition: transform .12s;
 }
@@ -347,7 +349,7 @@ body {
   color: var(--text-dim); font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--sans);
   transition: .15s;
 }
-.seg-btn.active { background: var(--primary); color: var(--on-primary); }
+.seg-btn.active { background: var(--grad); color: #fff; }
 
 .stats-chart { background: var(--surface); border-radius: var(--radius); padding: 18px 14px 10px; box-shadow: var(--shadow); margin-bottom: 16px; }
 .plot { position: relative; }
@@ -422,7 +424,7 @@ body {
 .rd-steps li { position: relative; padding-left: 40px; font-size: 15px; line-height: 1.5; min-height: 26px; }
 .rd-steps li::before {
   counter-increment: step; content: counter(step); position: absolute; left: 0; top: -1px;
-  width: 27px; height: 27px; border-radius: 50%; background: var(--primary); color: var(--on-primary);
+  width: 27px; height: 27px; border-radius: 50%; background: var(--grad); color: #fff;
   font-size: 13px; font-weight: 800; display: grid; place-items: center;
 }
 .rd-actions { margin-top: 26px; }
