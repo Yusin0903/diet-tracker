@@ -161,6 +161,16 @@ function goToday() {
   refresh();
 }
 
+// 從趨勢長條跳到某天的首頁記錄
+function goToDate(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setHours(0, 0, 0, 0);
+  if (d > startOfToday()) return;
+  state.viewDate = d;
+  showView("home");
+  refresh();
+}
+
 // ---------- Summary / 吉祥物 ----------
 // 水位 path:依比例 frac(0~1+)畫出有波浪頂的液體,裁切在身體圓內。
 function liquidPath(frac) {
@@ -1024,7 +1034,8 @@ function renderStats(data) {
       const lbl = month ? dd.getDate() : "日一二三四五六"[dd.getDay()];
       const showLbl = !month || dd.getDate() === 1 || dd.getDate() % 5 === 0;
       const isToday = d.date === todayStr ? " is-today" : "";
-      return `<div class="bar-col${isToday}">
+      const tappable = d.date <= todayStr ? " tappable" : ""; // 未來日不可點
+      return `<div class="bar-col${isToday}${tappable}" data-date="${d.date}">
           <div class="bar-wrap"><div class="bar ${calClass(d.calories, t)}" style="height:${h}px"></div></div>
           <div class="bar-lbl">${showLbl ? lbl : ""}</div>
         </div>`;
@@ -1032,7 +1043,8 @@ function renderStats(data) {
     .join("");
 
   $("stats-chart").innerHTML = `
-    <div class="plot" style="height:${H}px">${bands}<div class="bars ${month ? "dense" : ""}">${bars}</div></div>`;
+    <div class="plot" style="height:${H}px">${bands}<div class="bars ${month ? "dense" : ""}">${bars}</div></div>
+    <p class="chart-hint">點長條看那天的記錄</p>`;
 
   // 統計卡:平均、達標天數、平均缺口
   const logged = days.filter((d) => d.calories > 0);
@@ -1282,6 +1294,10 @@ function setupApp() {
     if (!b) return;
     statsRange = b.dataset.range;
     loadStats();
+  });
+  $("stats-chart").addEventListener("click", (e) => {
+    const col = e.target.closest(".bar-col.tappable");
+    if (col && col.dataset.date) goToDate(col.dataset.date);
   });
   $("recipe-add").addEventListener("click", () => openRecipeForm(null));
   $("modal-close").addEventListener("click", closeModal);

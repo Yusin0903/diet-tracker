@@ -365,6 +365,9 @@ body {
 .bar.b-zero { background: var(--track); height: 3px !important; }
 .bar-col.is-today .bar { outline: 2px solid rgba(255,255,255,.5); outline-offset: 1px; }
 .bar-lbl { font-size: 10px; color: var(--faint); margin-top: 6px; height: 12px; font-variant-numeric: tabular-nums; }
+.bar-col.tappable { cursor: pointer; }
+.bar-col.tappable:hover .bar { filter: brightness(1.2); }
+.chart-hint { text-align: center; font-size: 12px; color: var(--faint); margin-top: 12px; }
 
 /* 目標帶 + 上下限/TDEE 線(疊在長條後面) */
 .band { position: absolute; left: 0; right: 0; background: rgba(52,211,153,.12); border-radius: 4px; }
