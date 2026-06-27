@@ -533,10 +533,12 @@ async function openFavorites() {
     }
     html += `
       <div class="divider"></div>
-      <p class="items-hint">新增常用食物</p>
-      <label class="field"><span>名稱</span><input id="nf-name" type="text" /></label>
-      <label class="field"><span>熱量 (kcal)</span><input id="nf-cal" type="number" inputmode="numeric" /></label>
-      <label class="field"><span>蛋白質 (g)</span><input id="nf-pro" type="number" inputmode="decimal" step="0.1" /></label>
+      <p class="items-hint">新增常用食物(填「每份」的量,記錄時再選幾份)</p>
+      <label class="field"><span>名稱</span><input id="nf-name" type="text" placeholder="例如:雞胸肉(每 100g)" /></label>
+      <div class="grid2">
+        <label class="field"><span>每份熱量 (kcal)</span><input id="nf-cal" type="number" inputmode="numeric" /></label>
+        <label class="field"><span>每份蛋白 (g)</span><input id="nf-pro" type="number" inputmode="decimal" step="0.1" /></label>
+      </div>
       <button class="btn-primary" id="nf-save">新增到常用</button>`;
     $("modal-body").innerHTML = html;
 
@@ -544,17 +546,14 @@ async function openFavorites() {
     $("modal-body").querySelectorAll(".fav-item").forEach((row) => {
       const id = row.dataset.id;
       const f = foods.find((x) => String(x.id) === id);
-      row.querySelector('[data-act="add"]').addEventListener("click", async () => {
-        try {
-          await createEntry({
-            name: f.name,
-            calories: f.calories,
-            protein_g: f.protein_g,
-            source: "favorite",
-          });
-        } catch (err) {
-          toast(err.message, true);
-        }
+      row.querySelector('[data-act="add"]').addEventListener("click", () => {
+        logWithServings({
+          name: f.name,
+          perCal: f.calories,
+          perPro: f.protein_g,
+          unit: "每份",
+          source: "favorite",
+        });
       });
       row.querySelector('[data-act="del"]').addEventListener("click", async () => {
         try {
@@ -785,36 +784,75 @@ async function onBarcode(code) {
   showBarcodeResult(prod);
 }
 
-function showBarcodeResult(prod) {
-  const defG = prod.servingG || 100;
-  $("modal-title").textContent = "確認份量";
-  $("modal-body").innerHTML = `
-    <div class="fav-item" style="margin-bottom:14px">
-      <div class="fav-info">
-        <div class="fav-name">${escapeHtml(prod.name)}</div>
-        <div class="fav-macro">每 100g:${prod.cal100 ?? "?"} kcal · ${prod.pro100 ?? "?"} g 蛋白</div>
-      </div>
-    </div>
-    <label class="field"><span>份量 (g)</span>
-      <input id="bc-g" type="number" inputmode="decimal" value="${defG}" /></label>
-    <label class="field"><span>名稱</span>
-      <input id="m-name" type="text" value="${escapeAttr(prod.name)}" /></label>
-    <label class="field"><span>熱量 (kcal)</span>
-      <input id="m-cal" type="number" inputmode="numeric" /></label>
-    <label class="field"><span>蛋白質 (g)</span>
-      <input id="m-pro" type="number" inputmode="decimal" step="0.1" /></label>
-    <label class="field"><span>備註(可選)</span><input id="m-note" type="text" /></label>
-    <button class="btn-primary" id="m-save">確認記錄</button>
-    <input type="hidden" id="m-source" value="barcode" />`;
-
-  const recompute = () => {
-    const g = parseFloat($("bc-g").value);
-    if (prod.cal100 != null && !isNaN(g)) $("m-cal").value = Math.round((prod.cal100 * g) / 100);
-    if (prod.pro100 != null && !isNaN(g)) $("m-pro").value = +((prod.pro100 * g) / 100).toFixed(1);
+// 通用:選「份數」記錄一筆(常用食物、條碼共用)。perCal/perPro 為「每份」量。
+function logWithServings({ name, perCal, perPro, unit, source }) {
+  perCal = perCal || 0;
+  perPro = perPro || 0;
+  openModal(
+    "記到今天",
+    `<div class="fav-item" style="margin-bottom:14px">
+       <div class="fav-info">
+         <div class="fav-name"></div>
+         <div class="fav-macro">${escapeHtml(unit)} ${perCal} kcal · ${perPro}g 蛋白</div>
+       </div>
+     </div>
+     <label class="field"><span>份數</span>
+       <input id="lw-serv" type="number" inputmode="decimal" step="0.5" min="0" value="1" /></label>
+     <div class="total-preview" id="lw-total"></div>
+     <button class="btn-primary" id="lw-go">記到今天</button>`
+  );
+  $("modal-body").querySelector(".fav-name").textContent = name;
+  const total = $("lw-total");
+  const recalc = () => {
+    const s = parseFloat($("lw-serv").value);
+    if (!isNaN(s) && s > 0) {
+      total.hidden = false;
+      total.textContent = `總計 ${Math.round(perCal * s)} kcal · ${+(perPro * s).toFixed(1)} g 蛋白(${s} 份)`;
+    } else {
+      total.hidden = true;
+    }
   };
-  recompute(); // 用預設份量先帶一次
-  $("bc-g").addEventListener("input", recompute);
-  bindConfirm();
+  recalc();
+  $("lw-serv").addEventListener("input", recalc);
+  $("lw-go").addEventListener("click", async () => {
+    const s = parseFloat($("lw-serv").value);
+    const mult = isNaN(s) || s <= 0 ? 1 : s;
+    try {
+      await createEntry({
+        name,
+        calories: Math.round(perCal * mult),
+        protein_g: +(perPro * mult).toFixed(1),
+        source,
+        note: mult !== 1 ? `${mult} 份` : null,
+      });
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+function showBarcodeResult(prod) {
+  // 完全查不到營養 → 退回手動填(預填名稱)
+  if (prod.cal100 == null && prod.pro100 == null) {
+    $("modal-title").textContent = "查不到營養";
+    $("modal-body").innerHTML =
+      `<p class="items-hint">這個商品查不到營養數據,手動填一下:</p>` +
+      confirmForm({ name: prod.name }, "barcode");
+    bindConfirm();
+    return;
+  }
+  // 以「份」為單位:有每份克數就換算成每份,否則以每 100g 當作一份
+  let perCal, perPro, unit;
+  if (prod.servingG) {
+    perCal = prod.cal100 != null ? Math.round((prod.cal100 * prod.servingG) / 100) : 0;
+    perPro = prod.pro100 != null ? +((prod.pro100 * prod.servingG) / 100).toFixed(1) : 0;
+    unit = `每份 ${prod.servingG}g`;
+  } else {
+    perCal = prod.cal100 != null ? prod.cal100 : 0;
+    perPro = prod.pro100 != null ? prod.pro100 : 0;
+    unit = "每 100g";
+  }
+  logWithServings({ name: prod.name, perCal, perPro, unit, source: "barcode" });
 }
 
 // ========================================================================
