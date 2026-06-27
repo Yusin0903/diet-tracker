@@ -955,26 +955,7 @@ function openRecipeDetail(r) {
   );
   $("modal-body").querySelector(".rd-title").textContent = r.name;
   const logBtn = $("rd-log");
-  if (logBtn)
-    logBtn.addEventListener("click", async () => {
-      try {
-        await api(tzq("/api/entries"), {
-          method: "POST",
-          body: {
-            name: r.name,
-            calories: r.calories,
-            protein_g: r.protein_g || 0,
-            source: "recipe",
-          },
-        });
-        closeModal();
-        await refresh();
-        showView("home");
-        toast("已記一份 ✓");
-      } catch (err) {
-        toast(err.message, true);
-      }
-    });
+  if (logBtn) logBtn.addEventListener("click", () => logRecipe(r));
   $("rd-edit").addEventListener("click", () => openRecipeForm(r));
   $("rd-del").addEventListener("click", async () => {
     try {
@@ -982,6 +963,60 @@ function openRecipeDetail(r) {
       closeModal();
       loadRecipes();
       toast("已刪除");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// 記一份食譜:可選份數,自動換算熱量/蛋白
+function logRecipe(r) {
+  const cal = r.calories || 0;
+  const pro = r.protein_g || 0;
+  openModal(
+    "記到今天",
+    `<div class="fav-item" style="margin-bottom:14px">
+       <div class="fav-info">
+         <div class="fav-name"></div>
+         <div class="fav-macro">每份 ${cal} kcal · ${pro}g 蛋白</div>
+       </div>
+     </div>
+     <label class="field"><span>份數</span>
+       <input id="lr-serv" type="number" inputmode="decimal" step="0.5" min="0" value="1" /></label>
+     <div class="total-preview" id="lr-total"></div>
+     <button class="btn-primary" id="lr-go">記到今天</button>`
+  );
+  $("modal-body").querySelector(".fav-name").textContent = r.name;
+  const total = $("lr-total");
+  const recalc = () => {
+    const s = parseFloat($("lr-serv").value);
+    if (!isNaN(s) && s > 0) {
+      total.hidden = false;
+      total.textContent = `總計 ${Math.round(cal * s)} kcal · ${+(pro * s).toFixed(1)} g 蛋白(${s} 份)`;
+    } else {
+      total.hidden = true;
+    }
+  };
+  recalc();
+  $("lr-serv").addEventListener("input", recalc);
+  $("lr-go").addEventListener("click", async () => {
+    const s = parseFloat($("lr-serv").value);
+    const mult = isNaN(s) || s <= 0 ? 1 : s;
+    try {
+      await api(tzq("/api/entries"), {
+        method: "POST",
+        body: {
+          name: r.name,
+          calories: Math.round(cal * mult),
+          protein_g: +(pro * mult).toFixed(1),
+          source: "recipe",
+          note: mult !== 1 ? `${mult} 份` : null,
+        },
+      });
+      closeModal();
+      await refresh();
+      showView("home");
+      toast("已記錄 ✓");
     } catch (err) {
       toast(err.message, true);
     }
