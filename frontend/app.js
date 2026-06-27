@@ -209,18 +209,16 @@ async function loadSummary() {
     let cls, note;
     if (s.status.tdee === "over") {
       cls = "state-red";
-      const over = cal - s.targets.tdee;
-      note = `🚨 超過 TDEE ${over} kcal`;
+      note = `🚨 超過 TDEE +${cal - s.targets.tdee} kcal`;
     } else if (s.status.calories === "in_range") {
       cls = "state-green";
       note = `達標 ✓ 目標 ${s.targets.calories_min}–${s.targets.calories_max}`;
     } else if (s.status.calories === "over") {
       cls = "state-amber";
-      const toTdee = s.remaining.calories_to_tdee;
-      note = `超出目標 · 距 TDEE 還有 ${toTdee}`;
+      note = `超出目標 +${cal - s.targets.calories_max} kcal`;
     } else {
       cls = "state-blue";
-      note = `離目標還差 ${s.remaining.calories_to_min} kcal`;
+      note = `還差 ${s.remaining.calories_to_min} kcal 到目標`;
     }
     setMascotState(cls);
     $("cal-note").textContent = note;
