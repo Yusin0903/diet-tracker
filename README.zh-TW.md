@@ -6,6 +6,14 @@
 
 加了**會員系統**:需要**邀請碼**才能註冊(不能無腦註冊),登入後資料各自獨立。
 
+## 畫面
+
+| 首頁(吉祥物對照目標) | 趨勢(本週 / 本月) | 食譜詳情 |
+|---|---|---|
+| <img src="docs/screenshots/home.png" width="240" alt="首頁" /> | <img src="docs/screenshots/trends.png" width="240" alt="趨勢" /> | <img src="docs/screenshots/recipe.png" width="240" alt="食譜" /> |
+
+首頁吉祥物依 TDEE 填滿、超過就「溢出」;趨勢頁把每天熱量對照目標上下限;食譜可依份數記錄。
+
 ## 技術選型
 
 | 層 | 技術 |

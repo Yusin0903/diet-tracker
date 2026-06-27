@@ -6,6 +6,14 @@ A diet-logging tool built around one core value: **log fast + auto-total against
 
 It has a **member system**: an **invite code** is required to register (no open sign-up), and each member's data is fully isolated.
 
+## Screenshots
+
+| Home (mascot vs. target) | Trend (week / month) | Recipe detail |
+|---|---|---|
+| <img src="docs/screenshots/home.png" width="240" alt="Home" /> | <img src="docs/screenshots/trends.png" width="240" alt="Trend" /> | <img src="docs/screenshots/recipe.png" width="240" alt="Recipe" /> |
+
+The home mascot fills toward your TDEE and "overflows" when you go over; the trend tab charts daily calories against your target band; recipes are logged per serving.
+
 ## Tech stack
 
 | Layer | Tech |
