@@ -340,6 +340,50 @@ body {
 }
 .field textarea:focus { border-color: var(--accent); background: #20242f; }
 
+/* ---------- 趨勢 ---------- */
+.seg { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 999px; margin-bottom: 20px; }
+.seg-btn {
+  flex: 1; padding: 9px; border: none; border-radius: 999px; background: transparent;
+  color: var(--text-dim); font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--sans);
+  transition: .15s;
+}
+.seg-btn.active { background: var(--primary); color: var(--on-primary); }
+
+.stats-chart { background: var(--surface); border-radius: var(--radius); padding: 18px 14px 10px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.plot { position: relative; }
+.bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 6px; }
+.bars.dense { gap: 2px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.bar-wrap { width: 100%; flex: 1; display: flex; align-items: flex-end; justify-content: center; }
+.bar { width: 78%; max-width: 30px; border-radius: 5px 5px 0 0; transition: height .5s cubic-bezier(.4,0,.2,1); }
+.bars.dense .bar { width: 90%; border-radius: 3px 3px 0 0; }
+.bar.b-green { background: var(--good); }
+.bar.b-blue { background: #8aa6ff; }
+.bar.b-amber { background: var(--warn); }
+.bar.b-red { background: var(--bad); }
+.bar.b-neutral { background: var(--accent); }
+.bar.b-zero { background: var(--track); height: 3px !important; }
+.bar-col.is-today .bar { outline: 2px solid rgba(255,255,255,.5); outline-offset: 1px; }
+.bar-lbl { font-size: 10px; color: var(--faint); margin-top: 6px; height: 12px; font-variant-numeric: tabular-nums; }
+
+/* 目標帶 + 上下限/TDEE 線(疊在長條後面) */
+.band { position: absolute; left: 0; right: 0; background: rgba(52,211,153,.12); border-radius: 4px; }
+.goal-line, .tdee-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px dashed rgba(52,211,153,.6); }
+.tdee-line { border-top: 1.5px dashed rgba(251,113,133,.6); }
+.goal-line span, .tdee-line span {
+  position: absolute; right: 0; top: -8px; font-size: 9px; padding: 1px 5px; border-radius: 6px;
+  background: var(--surface-2); color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tdee-line span { color: var(--bad); }
+
+.stats-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat-card { background: var(--surface); border-radius: var(--radius-sm); padding: 14px 10px; text-align: center; box-shadow: var(--shadow); }
+.stat-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat-val span { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-left: 2px; }
+.stat-card.good .stat-val { color: var(--good); }
+.stat-card.bad .stat-val { color: var(--bad); }
+.stat-lbl { font-size: 12px; color: var(--text-dim); margin-top: 5px; }
+
 /* ---------- 食譜 ---------- */
 .recipe-list { display: flex; flex-direction: column; gap: 10px; }
 .recipe-card {

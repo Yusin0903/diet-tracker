@@ -201,6 +201,31 @@ def test_recipes_crud_and_isolation(client):
     assert client.delete(f"/api/recipes/{rid}", headers=h).status_code == 200
 
 
+def test_stats_range(client):
+    tok = _register(client, "trend").json()["token"]
+    h = _auth(tok)
+    client.post("/api/entries", headers=h, json={
+        "name": "餐", "calories": 700, "protein_g": 40, "source": "manual"})
+    # 取含今天的 3 天區間
+    import datetime as _dt
+    today = _dt.date.today()
+    start = (today - _dt.timedelta(days=2)).isoformat()
+    end = today.isoformat()
+    r = client.get(f"/api/stats?start={start}&end={end}", headers=h)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["days"]) == 3            # 區間補滿
+    assert data["days"][-1]["date"] == end   # 最後一天是今天
+    assert data["days"][-1]["calories"] == 700
+    assert data["days"][0]["calories"] == 0  # 沒記錄的填 0
+
+
+def test_stats_bad_range(client):
+    tok = _register(client, "trend2").json()["token"]
+    h = _auth(tok)
+    assert client.get("/api/stats?start=2026-01-05&end=2026-01-01", headers=h).status_code == 400
+
+
 def test_timezone_param(client):
     tok = _register(client, "tz").json()["token"]
     h = _auth(tok)

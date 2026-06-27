@@ -944,10 +944,125 @@ function floatOrNull(v) {
 function showView(name) {
   $("view-home").hidden = name !== "home";
   $("view-recipes").hidden = name !== "recipes";
+  $("view-stats").hidden = name !== "stats";
   document
     .querySelectorAll(".tabbar-btn")
     .forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   if (name === "recipes") loadRecipes();
+  if (name === "stats") loadStats();
+}
+
+// ========================================================================
+// 趨勢(本週 / 本月 熱量長條圖 + 目標上下限)
+// ========================================================================
+let statsRange = "week";
+
+function weekRange() {
+  const t = startOfToday();
+  const mondayOffset = (t.getDay() + 6) % 7; // 週一=0
+  const start = new Date(t);
+  start.setDate(t.getDate() - mondayOffset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return [start, end];
+}
+function monthRange() {
+  const t = startOfToday();
+  return [new Date(t.getFullYear(), t.getMonth(), 1), new Date(t.getFullYear(), t.getMonth() + 1, 0)];
+}
+
+async function loadStats() {
+  document
+    .querySelectorAll("#stats-seg .seg-btn")
+    .forEach((b) => b.classList.toggle("active", b.dataset.range === statsRange));
+  const [start, end] = statsRange === "week" ? weekRange() : monthRange();
+  const chart = $("stats-chart");
+  chart.innerHTML = `<div class="analyzing"><div class="spinner"></div></div>`;
+  $("stats-cards").innerHTML = "";
+  try {
+    const data = await api(tzq("/api/stats") + `&start=${ymd(start)}&end=${ymd(end)}`);
+    renderStats(data);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function calClass(cal, t) {
+  if (!t) return "b-neutral";
+  if (cal === 0) return "b-zero";
+  if (t.tdee && cal > t.tdee) return "b-red";
+  if (cal > t.calories_max) return "b-amber";
+  if (cal >= t.calories_min) return "b-green";
+  return "b-blue";
+}
+
+function renderStats(data) {
+  const t = data.targets;
+  const days = data.days;
+  const todayStr = ymd(startOfToday());
+  const cals = days.map((d) => d.calories);
+  // 縮放上限:資料、目標上限、TDEE 取最大,再留 12% 空間
+  let top = Math.max(...cals, t ? t.calories_max : 0, t && t.tdee ? t.tdee : 0, 100);
+  top = top * 1.12;
+  const H = 188; // 繪圖區高度 px
+  const y = (v) => Math.max(0, Math.min(H, (v / top) * H));
+  const month = statsRange === "month";
+
+  // 目標帶(下限~上限)與 TDEE 線
+  let bands = "";
+  if (t) {
+    const yMin = y(t.calories_min);
+    const yMax = y(t.calories_max);
+    bands += `<div class="band" style="bottom:${yMin}px;height:${yMax - yMin}px"></div>`;
+    bands += `<div class="goal-line" style="bottom:${yMax}px"><span>上限 ${t.calories_max}</span></div>`;
+    bands += `<div class="goal-line" style="bottom:${yMin}px"><span>下限 ${t.calories_min}</span></div>`;
+    if (t.tdee) bands += `<div class="tdee-line" style="bottom:${y(t.tdee)}px"><span>TDEE ${t.tdee}</span></div>`;
+  }
+
+  const bars = days
+    .map((d) => {
+      const h = d.calories > 0 ? Math.max(3, y(d.calories)) : 0;
+      const dd = new Date(d.date + "T00:00:00");
+      const lbl = month ? dd.getDate() : "日一二三四五六"[dd.getDay()];
+      const showLbl = !month || dd.getDate() === 1 || dd.getDate() % 5 === 0;
+      const isToday = d.date === todayStr ? " is-today" : "";
+      return `<div class="bar-col${isToday}">
+          <div class="bar-wrap"><div class="bar ${calClass(d.calories, t)}" style="height:${h}px"></div></div>
+          <div class="bar-lbl">${showLbl ? lbl : ""}</div>
+        </div>`;
+    })
+    .join("");
+
+  $("stats-chart").innerHTML = `
+    <div class="plot" style="height:${H}px">${bands}<div class="bars ${month ? "dense" : ""}">${bars}</div></div>`;
+
+  // 統計卡:平均、達標天數、平均缺口
+  const logged = days.filter((d) => d.calories > 0);
+  const avg = logged.length ? Math.round(logged.reduce((s, d) => s + d.calories, 0) / logged.length) : 0;
+  const cards = [];
+  cards.push(statCard("平均 / 天", logged.length ? `${avg}` : "—", "kcal"));
+  if (t) {
+    const onTarget = logged.filter((d) => d.calories >= t.calories_min && d.calories <= t.calories_max).length;
+    cards.push(statCard("達標天數", `${onTarget}`, `/ ${logged.length} 天`));
+    if (t.tdee && logged.length) {
+      const gap = Math.round(t.tdee - avg); // 正=赤字
+      cards.push(statCard(gap >= 0 ? "平均赤字" : "平均盈餘", `${Math.abs(gap)}`, "kcal/天", gap >= 0 ? "good" : "bad"));
+    }
+  }
+  $("stats-cards").innerHTML = cards.join("");
+  if (!t) {
+    $("stats-cards").insertAdjacentHTML(
+      "beforeend",
+      `<p class="items-hint" style="grid-column:1/-1;text-align:center">設定每日目標後,這裡會畫出上下限與缺口。</p>`
+    );
+  }
+}
+
+function statCard(label, value, unit, tone) {
+  return `<div class="stat-card${tone ? " " + tone : ""}">
+      <div class="stat-val">${value}<span>${unit}</span></div>
+      <div class="stat-lbl">${label}</div>
+    </div>`;
 }
 
 // ========================================================================
@@ -1164,6 +1279,12 @@ function setupApp() {
   $("date-prev").addEventListener("click", () => shiftDate(-1));
   $("date-next").addEventListener("click", () => shiftDate(1));
   $("date-center").addEventListener("click", goToday);
+  $("stats-seg").addEventListener("click", (e) => {
+    const b = e.target.closest(".seg-btn");
+    if (!b) return;
+    statsRange = b.dataset.range;
+    loadStats();
+  });
   $("recipe-add").addEventListener("click", () => openRecipeForm(null));
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {
