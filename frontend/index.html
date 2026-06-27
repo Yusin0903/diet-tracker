@@ -62,6 +62,16 @@
     <!-- ===== 首頁 view ===== -->
     <div id="view-home">
 
+    <!-- 日期切換(可往前翻看過往紀錄) -->
+    <div class="date-bar">
+      <button id="date-prev" class="date-arrow" aria-label="前一天">‹</button>
+      <button id="date-center" class="date-center">
+        <span id="date-main">今天</span>
+        <span id="date-sub" class="list-date"></span>
+      </button>
+      <button id="date-next" class="date-arrow" aria-label="後一天">›</button>
+    </div>
+
     <!-- HERO:吉祥物熱量 + 蛋白條 -->
     <section class="hero-mascot">
       <div class="mascot-card state-blue" id="cal-card">
@@ -118,7 +128,7 @@
     <div id="protein-alert" class="alert" hidden></div>
 
     <!-- 記錄入口 -->
-    <section class="actions">
+    <section class="actions" id="app-actions">
       <button class="action" id="act-photo">
         <span class="action-icon">📷</span><span>拍照/選圖</span>
       </button>
@@ -135,14 +145,13 @@
     <!-- 不加 capture:點下去跳系統選單(相機 / 相簿 / 檔案),可拍照也可選圖 -->
     <input id="camera-input" type="file" accept="image/*" hidden />
 
-    <!-- 今日記錄 -->
+    <!-- 當日記錄 -->
     <section class="list-section">
       <div class="list-head">
-        <h2>今天</h2>
-        <span class="list-date" id="today-date"></span>
+        <h2>記錄</h2>
       </div>
       <ul id="entry-list" class="entry-list"></ul>
-      <p id="empty-hint" class="empty-hint" hidden>還沒有記錄,從上面的入口開始吧。</p>
+      <p id="empty-hint" class="empty-hint" hidden>這天還沒有記錄。</p>
     </section>
 
     </div><!-- /view-home -->

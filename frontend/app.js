@@ -10,7 +10,28 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY) || null,
   username: localStorage.getItem("diet_user") || "",
   authMode: "login",
+  viewDate: startOfToday(), // 目前在看哪一天(可往前翻歷史)
 };
+
+// ---------- 日期工具 ----------
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function ymd(d) {
+  return (
+    d.getFullYear() +
+    "-" + String(d.getMonth() + 1).padStart(2, "0") +
+    "-" + String(d.getDate()).padStart(2, "0")
+  );
+}
+function isViewingToday() {
+  return ymd(state.viewDate) === ymd(startOfToday());
+}
+function dateParam() {
+  return "&date=" + ymd(state.viewDate);
+}
 
 // ---------- API helper ----------
 async function api(path, { method = "GET", body, isForm = false } = {}) {
@@ -98,12 +119,46 @@ function showApp() {
   authScreen.hidden = true;
   appScreen.hidden = false;
   $("who").textContent = state.username;
+  state.viewDate = startOfToday();
   showView("home");
   refresh();
 }
 
 async function refresh() {
+  updateDateBar();
   await Promise.all([loadSummary(), loadEntries()]);
+}
+
+// 更新日期列、依是否為今天調整可記錄入口
+function updateDateBar() {
+  const today = startOfToday();
+  const diff = Math.round((today - state.viewDate) / 86400000);
+  let label;
+  if (diff === 0) label = "今天";
+  else if (diff === 1) label = "昨天";
+  else if (diff === 2) label = "前天";
+  else label = `${state.viewDate.getMonth() + 1}月${state.viewDate.getDate()}日`;
+  $("date-main").textContent = label;
+  const wk = "日一二三四五六"[state.viewDate.getDay()];
+  $("date-sub").textContent = ymd(state.viewDate) + " 週" + wk;
+  $("date-next").disabled = isViewingToday(); // 不能看未來
+  // 看歷史時隱藏記錄入口(新增一律記到今天)
+  const past = !isViewingToday();
+  $("app-actions").hidden = past;
+  $("camera-input").disabled = past;
+}
+
+function shiftDate(days) {
+  const d = new Date(state.viewDate);
+  d.setDate(d.getDate() + days);
+  if (d > startOfToday()) return; // 擋未來
+  state.viewDate = d;
+  refresh();
+}
+
+function goToday() {
+  state.viewDate = startOfToday();
+  refresh();
 }
 
 // ---------- Summary / 吉祥物 ----------
@@ -134,8 +189,7 @@ function setMascotState(cls) {
 }
 
 async function loadSummary() {
-  const s = await api(tzq("/api/summary"));
-  $("today-date").textContent = s.date;
+  const s = await api(tzq("/api/summary") + dateParam());
   const cal = s.consumed.calories;
   const pro = s.consumed.protein_g;
   $("cal-value").textContent = cal;
@@ -199,7 +253,7 @@ async function loadSummary() {
 const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐", barcode: "🏷️", recipe: "📖" };
 
 async function loadEntries() {
-  const entries = await api(tzq("/api/entries"));
+  const entries = await api(tzq("/api/entries") + dateParam());
   const list = $("entry-list");
   list.innerHTML = "";
   $("empty-hint").hidden = entries.length > 0;
@@ -280,6 +334,7 @@ function openEntryEdit(e) {
 async function createEntry(payload) {
   await api(tzq("/api/entries"), { method: "POST", body: payload });
   closeModal();
+  state.viewDate = startOfToday(); // 新記錄記在今天,切回今天讓使用者看到
   await refresh();
   toast("已記錄 ✓");
 }
@@ -1106,6 +1161,9 @@ function setupApp() {
   document.querySelectorAll(".tabbar-btn").forEach((b) =>
     b.addEventListener("click", () => showView(b.dataset.view))
   );
+  $("date-prev").addEventListener("click", () => shiftDate(-1));
+  $("date-next").addEventListener("click", () => shiftDate(1));
+  $("date-center").addEventListener("click", goToday);
   $("recipe-add").addEventListener("click", () => openRecipeForm(null));
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {
