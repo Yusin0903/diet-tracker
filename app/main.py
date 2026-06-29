@@ -6,7 +6,7 @@ FastAPI + Postgres + Gemini vision,並 serve PWA 靜態檔。
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -15,6 +15,22 @@ from app.routers import analyze, auth, entries, foods, profile, recipes, stats, 
 from app.settings import settings
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+# Content-Security-Policy: lock the page down to self + the few third parties we
+# actually use (Google Fonts, the YouTube recipe embed, Open Food Facts lookups).
+# Scripts are 'self' only — no inline scripts — which blunts XSS even though the
+# auth token lives in localStorage. Inline style attributes are generated in JS,
+# so styles need 'unsafe-inline'.
+_CSP = (
+    "default-src 'self'; "
+    "img-src 'self' data: blob:; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "script-src 'self'; "
+    "connect-src 'self' https://world.openfoodfacts.org; "
+    "frame-src https://www.youtube.com https://www.youtube-nocookie.com; "
+    "base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+)
 
 
 @asynccontextmanager
@@ -29,7 +45,18 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="飲控 App", lifespan=lifespan)
+app = FastAPI(title="好好吃飯 App", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("Content-Security-Policy", _CSP)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    return resp
+
 
 for module in (auth, analyze, entries, summary, foods, profile, recipes, stats):
     app.include_router(module.router)

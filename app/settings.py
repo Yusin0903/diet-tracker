@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     login_window_s: int = 600
     login_block_s: int = 900
 
+    # Number of trusted reverse proxies in front of the app (Zeabur = 1).
+    # The real client IP is the Nth-from-last X-Forwarded-For entry; anything
+    # the client itself prepends sits to the left and is ignored.
+    trusted_proxy_hops: int = 1
+
+    # Abuse limits for the expensive Gemini /analyze endpoint.
+    max_upload_mb: int = 8            # Reject larger uploads (memory / cost)
+    analyze_max_per_window: int = 20  # Per-user calls allowed per window
+    analyze_window_s: int = 600       # Window length in seconds
+
     # 時區後備值
     tz: str = "Asia/Taipei"
 

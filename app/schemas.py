@@ -1,49 +1,58 @@
-"""API 的 Pydantic 請求模型。"""
+"""Pydantic request models for the API."""
+import re
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class RegisterIn(BaseModel):
-    username: str
-    password: str
-    invite_code: str
+    username: str = Field(..., max_length=50)
+    password: str = Field(..., max_length=128)  # Upper bound guards against huge-input hashing
+    invite_code: str = Field(..., max_length=128)
 
 
 class LoginIn(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., max_length=50)
+    password: str = Field(..., max_length=128)
 
 
 class EntryIn(BaseModel):
-    name: str = Field(..., min_length=1)
-    calories: int = Field(..., ge=0)
-    protein_g: float = Field(..., ge=0)
+    name: str = Field(..., min_length=1, max_length=100)
+    calories: int = Field(..., ge=0, le=100_000)
+    protein_g: float = Field(..., ge=0, le=10_000)
     source: str = Field("manual")  # 'photo' | 'manual' | 'favorite' | 'barcode' | 'recipe'
-    note: Optional[str] = None
+    note: Optional[str] = Field(None, max_length=500)
 
 
 class EntryEdit(BaseModel):
-    name: str = Field(..., min_length=1)
-    calories: int = Field(..., ge=0)
-    protein_g: float = Field(..., ge=0)
-    note: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    calories: int = Field(..., ge=0, le=100_000)
+    protein_g: float = Field(..., ge=0, le=10_000)
+    note: Optional[str] = Field(None, max_length=500)
 
 
 class RecipeIn(BaseModel):
-    name: str = Field(..., min_length=1)
-    servings: Optional[float] = Field(None, ge=0)
-    calories: Optional[int] = Field(None, ge=0)      # 每份熱量
-    protein_g: Optional[float] = Field(None, ge=0)   # 每份蛋白
-    ingredients: Optional[str] = None
-    steps: Optional[str] = None
-    video_url: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    servings: Optional[float] = Field(None, ge=0, le=10_000)
+    calories: Optional[int] = Field(None, ge=0, le=100_000)      # Per serving
+    protein_g: Optional[float] = Field(None, ge=0, le=10_000)    # Per serving
+    ingredients: Optional[str] = Field(None, max_length=4000)
+    steps: Optional[str] = Field(None, max_length=4000)
+    video_url: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("video_url")
+    @classmethod
+    def _http_only(cls, v: Optional[str]) -> Optional[str]:
+        # Reject javascript:/data: etc. — only allow real http(s) links.
+        if v and v.strip() and not re.match(r"^https?://", v.strip(), re.IGNORECASE):
+            raise ValueError("影片連結需為 http(s) 開頭")
+        return v
 
 
 class FoodIn(BaseModel):
-    name: str = Field(..., min_length=1)
-    calories: int = Field(..., ge=0)
-    protein_g: float = Field(..., ge=0)
+    name: str = Field(..., min_length=1, max_length=100)
+    calories: int = Field(..., ge=0, le=100_000)
+    protein_g: float = Field(..., ge=0, le=10_000)
 
 
 class ProfileIn(BaseModel):

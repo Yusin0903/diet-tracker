@@ -10,6 +10,8 @@ from threading import Lock
 
 from fastapi import HTTPException, Request
 
+from app.settings import settings
+
 
 class RateLimiter:
     def __init__(self, max_failures: int, window_s: int, block_s: int):
@@ -69,9 +71,55 @@ class RateLimiter:
             self._blocked.pop(key, None)
 
 
+class UsageLimiter:
+    """Sliding-window cap on the *total* number of calls per key (not just
+    failures). Used to throttle expensive endpoints such as /analyze so a
+    single (possibly invited) account can't run up the Gemini bill or DoS it.
+    """
+
+    def __init__(self, max_calls: int, window_s: int):
+        self.max_calls = max_calls
+        self.window_s = window_s
+        self._calls: dict[str, deque] = defaultdict(deque)
+        self._lock = Lock()
+
+    def hit(self, key: str) -> None:
+        """Record one call; raise 429 once the key exceeds the window cap."""
+        now = time.time()
+        with self._lock:
+            dq = self._calls[key]
+            while dq and dq[0] < now - self.window_s:
+                dq.popleft()
+            if len(dq) >= self.max_calls:
+                retry = int(dq[0] + self.window_s - now) + 1
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"操作太頻繁,請 {retry} 秒後再試",
+                    headers={"Retry-After": str(retry)},
+                )
+            dq.append(now)
+            if len(self._calls) > 4096:  # Bound memory across many keys
+                for k in list(self._calls):
+                    d = self._calls[k]
+                    while d and d[0] < now - self.window_s:
+                        d.popleft()
+                    if not d:
+                        del self._calls[k]
+
+
 def client_ip(request: Request) -> str:
-    """取得真實來源 IP。Zeabur 等反向代理會帶 X-Forwarded-For。"""
+    """Resolve the real client IP behind a reverse proxy.
+
+    Each proxy *appends* the address that connected to it, so with N trusted
+    proxies in front of us the real client is the Nth-from-last entry. Reading
+    from the right means a client that forges `X-Forwarded-For: <fake>` only
+    pollutes the left side, which we ignore — so the limiter can't be bypassed
+    by spoofing the header.
+    """
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            hops = max(1, settings.trusted_proxy_hops)
+            return parts[max(0, len(parts) - hops)]
     return request.client.host if request.client else "unknown"
