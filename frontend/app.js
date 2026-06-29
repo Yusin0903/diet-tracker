@@ -305,8 +305,24 @@ function openEntryEdit(e) {
      <label class="field"><span>備註(可選)</span>
        <input id="e-note" type="text" value="${escapeAttr(e.note || "")}" /></label>
      <button class="btn-primary" id="e-save">儲存</button>
+     <button class="ghost-btn fullw" id="e-fav">⭐ 加入常用</button>
      <button class="btn-danger" id="e-del">刪除這筆記錄</button>`
   );
+  $("e-fav").addEventListener("click", async () => {
+    const name = $("e-name").value.trim();
+    const calories = parseInt($("e-cal").value, 10);
+    const protein_g = parseFloat($("e-pro").value);
+    if (!name || isNaN(calories) || isNaN(protein_g)) {
+      toast("請填完整名稱與數值", true);
+      return;
+    }
+    try {
+      await api("/api/foods", { method: "POST", body: { name, calories, protein_g } });
+      toast("已加入常用 ⭐");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
   $("e-save").addEventListener("click", async () => {
     const name = $("e-name").value.trim();
     const calories = parseInt($("e-cal").value, 10);
@@ -1148,6 +1164,15 @@ async function loadRecipes() {
   }
 }
 
+// 從各種 YouTube 連結格式抽出 11 碼影片 ID
+function ytId(url) {
+  if (!url) return null;
+  const m = String(url).match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/))([\w-]{11})/
+  );
+  return m ? m[1] : null;
+}
+
 function openRecipeDetail(r) {
   const ing = splitLines(r.ingredients);
   const steps = splitLines(r.steps);
@@ -1155,11 +1180,18 @@ function openRecipeDetail(r) {
   if (r.calories != null) chips.push(`🔥 ${r.calories} kcal/份`);
   if (r.protein_g != null) chips.push(`💪 ${r.protein_g}g 蛋白`);
   if (r.servings != null) chips.push(`🍽️ ${r.servings} 份`);
+  const vid = ytId(r.video_url);
+  const videoHtml = vid
+    ? `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${vid}" title="食譜影片" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+    : r.video_url
+    ? `<a class="video-link" href="${escapeAttr(r.video_url)}" target="_blank" rel="noopener">▶ 開啟影片連結</a>`
+    : "";
   openModal(
     "",
     `<div class="recipe-detail">
        <h2 class="rd-title"></h2>
        ${chips.length ? `<div class="rd-chips">${chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("")}</div>` : ""}
+       ${videoHtml}
        ${ing.length ? `<h3 class="rd-h">食材</h3><ul class="rd-ing">${ing.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
        ${steps.length ? `<h3 class="rd-h">步驟</h3><ol class="rd-steps">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : ""}
        <div class="rd-actions">
@@ -1259,6 +1291,8 @@ function openRecipeForm(r) {
        <textarea id="rf-ing" rows="4" placeholder="雞胸肉 200g&#10;白飯 1 碗&#10;醬油 1 匙">${escapeHtml(e.ingredients || "")}</textarea></label>
      <label class="field"><span>步驟(一行一步)</span>
        <textarea id="rf-steps" rows="5" placeholder="雞胸切片醃 10 分鐘&#10;下鍋煎熟&#10;鋪在白飯上、淋醬">${escapeHtml(e.steps || "")}</textarea></label>
+     <label class="field"><span>YouTube 連結(可選,會直接嵌入影片)</span>
+       <input id="rf-video" type="url" inputmode="url" value="${escapeAttr(e.video_url || "")}" placeholder="https://youtu.be/..." /></label>
      <button class="btn-primary" id="rf-save">${r ? "儲存變更" : "建立食譜"}</button>`
   );
   $("rf-save").addEventListener("click", async () => {
@@ -1274,6 +1308,7 @@ function openRecipeForm(r) {
       servings: floatOrNull($("rf-serv").value),
       ingredients: $("rf-ing").value.trim() || null,
       steps: $("rf-steps").value.trim() || null,
+      video_url: $("rf-video").value.trim() || null,
     };
     try {
       if (r) await api(`/api/recipes/${r.id}`, { method: "PUT", body });

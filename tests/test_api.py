@@ -182,9 +182,11 @@ def test_recipes_crud_and_isolation(client):
     assert client.get("/api/recipes", headers=h).json() == []
     rid = client.post("/api/recipes", headers=h, json={
         "name": "雞胸蓋飯", "calories": 520, "protein_g": 48, "servings": 1,
-        "ingredients": "雞胸 200g\n白飯 1 碗", "steps": "煎熟\n鋪上"}).json()["id"]
+        "ingredients": "雞胸 200g\n白飯 1 碗", "steps": "煎熟\n鋪上",
+        "video_url": "https://youtu.be/abcdefghijk"}).json()["id"]
     lst = client.get("/api/recipes", headers=h).json()
     assert len(lst) == 1 and lst[0]["name"] == "雞胸蓋飯"
+    assert lst[0]["video_url"] == "https://youtu.be/abcdefghijk"
     # 更新
     up = client.put(f"/api/recipes/{rid}", headers=h, json={
         "name": "辣雞胸蓋飯", "calories": 540, "protein_g": 48,

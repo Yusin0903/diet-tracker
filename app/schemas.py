@@ -37,6 +37,7 @@ class RecipeIn(BaseModel):
     protein_g: Optional[float] = Field(None, ge=0)   # 每份蛋白
     ingredients: Optional[str] = None
     steps: Optional[str] = None
+    video_url: Optional[str] = None
 
 
 class FoodIn(BaseModel):

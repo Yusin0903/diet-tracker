@@ -17,6 +17,7 @@ def _row(r: dict) -> dict:
         "protein_g": float(r["protein_g"]) if r["protein_g"] is not None else None,
         "ingredients": r["ingredients"] or "",
         "steps": r["steps"] or "",
+        "video_url": r["video_url"] or "",
     }
 
 
@@ -25,7 +26,7 @@ def list_recipes(user: dict = Depends(current_user)):
     with get_cursor() as cur:
         cur.execute(
             """
-            SELECT id, name, servings, calories, protein_g, ingredients, steps
+            SELECT id, name, servings, calories, protein_g, ingredients, steps, video_url
             FROM recipes WHERE user_id = %s ORDER BY updated_at DESC
             """,
             (user["id"],),
@@ -38,12 +39,12 @@ def create_recipe(body: RecipeIn, user: dict = Depends(current_user)):
     with get_cursor(commit=True) as cur:
         cur.execute(
             """
-            INSERT INTO recipes (user_id, name, servings, calories, protein_g, ingredients, steps)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, name, servings, calories, protein_g, ingredients, steps
+            INSERT INTO recipes (user_id, name, servings, calories, protein_g, ingredients, steps, video_url)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, name, servings, calories, protein_g, ingredients, steps, video_url
             """,
             (user["id"], body.name, body.servings, body.calories, body.protein_g,
-             body.ingredients, body.steps),
+             body.ingredients, body.steps, body.video_url),
         )
         return _row(cur.fetchone())
 
@@ -54,12 +55,12 @@ def update_recipe(recipe_id: int, body: RecipeIn, user: dict = Depends(current_u
         cur.execute(
             """
             UPDATE recipes SET name = %s, servings = %s, calories = %s, protein_g = %s,
-                   ingredients = %s, steps = %s, updated_at = now()
+                   ingredients = %s, steps = %s, video_url = %s, updated_at = now()
             WHERE id = %s AND user_id = %s
-            RETURNING id, name, servings, calories, protein_g, ingredients, steps
+            RETURNING id, name, servings, calories, protein_g, ingredients, steps, video_url
             """,
             (body.name, body.servings, body.calories, body.protein_g,
-             body.ingredients, body.steps, recipe_id, user["id"]),
+             body.ingredients, body.steps, body.video_url, recipe_id, user["id"]),
         )
         row = cur.fetchone()
         if row is None:

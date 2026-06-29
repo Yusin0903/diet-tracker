@@ -62,7 +62,10 @@ CREATE TABLE IF NOT EXISTS recipes (
     protein_g    NUMERIC(6,1),            -- 每份蛋白(可選)
     ingredients  TEXT,                    -- 食材,一行一項
     steps        TEXT,                    -- 步驟,一行一步
+    video_url    TEXT,                    -- YouTube 連結(可選)
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes (user_id, updated_at DESC);
+-- 既有資料庫升級(新欄位)
+ALTER TABLE recipes ADD COLUMN IF NOT EXISTS video_url TEXT;
