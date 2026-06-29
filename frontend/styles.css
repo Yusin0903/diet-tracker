@@ -199,9 +199,20 @@ body {
 .action:hover { filter: brightness(1.18); }
 .action:active { transform: scale(.97); }
 .action-icon {
-  font-size: 22px; width: 46px; height: 46px; display: grid; place-items: center;
-  background: var(--surface-2); border-radius: 14px;
+  width: 46px; height: 46px; display: grid; place-items: center;
+  background: var(--surface-2); border-radius: 14px; color: var(--text);
 }
+.action-icon svg { width: 24px; height: 24px; }
+
+/* ---------- 線條圖示 ---------- */
+.ico { width: 22px; height: 22px; display: block; }
+[data-ico] { display: inline-flex; }
+.icon-btn {
+  background: transparent; border: none; color: var(--text-dim); padding: 8px;
+  border-radius: 10px; cursor: pointer; display: grid; place-items: center; transition: .15s;
+}
+.icon-btn:hover { color: var(--text); background: var(--surface-2); }
+.icon-btn svg { width: 21px; height: 21px; }
 
 /* ---------- 掃描框 ---------- */
 .scanbox { position: relative; width: 100%; border-radius: 18px; overflow: hidden; background: #000; margin-bottom: 14px; }
@@ -232,7 +243,8 @@ body {
   display: flex; align-items: center; gap: 13px; background: var(--surface);
   border-radius: var(--radius-sm); padding: 13px 15px; box-shadow: var(--shadow);
 }
-.entry-badge { font-size: 17px; width: 38px; height: 38px; display: grid; place-items: center; background: var(--surface-2); border-radius: 11px; flex: none; }
+.entry-badge { width: 38px; height: 38px; display: grid; place-items: center; background: var(--surface-2); border-radius: 11px; flex: none; color: var(--text-dim); }
+.entry-badge svg { width: 19px; height: 19px; }
 .entry-main { flex: 1; min-width: 0; }
 .entry-name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-sub { font-size: 12px; color: var(--faint); margin-top: 2px; font-variant-numeric: tabular-nums; }
@@ -281,7 +293,8 @@ body {
 }
 .choice-btn:hover { filter: brightness(1.25); }
 .choice-btn:active { transform: scale(.97); }
-.choice-ic { font-size: 30px; }
+.choice-ic { color: var(--text); }
+.choice-ic svg { width: 30px; height: 30px; }
 .redo-btn { width: 100%; padding: 11px; margin-bottom: 14px; background: var(--surface-2); }
 
 /* 份數總計提示 */
@@ -310,21 +323,25 @@ body {
   padding: 5px; background: none; border: none; cursor: pointer; font-family: var(--sans);
   color: var(--text-dim); font-size: 11px; font-weight: 700; transition: color .15s;
 }
-.tabbar-ic { font-size: 21px; filter: grayscale(.5) opacity(.65); transition: .15s; }
+.tabbar-ic { display: grid; place-items: center; opacity: .7; transition: .15s; }
+.tabbar-ic svg { width: 23px; height: 23px; }
 .tabbar-btn.active { color: var(--text); }
-.tabbar-btn.active .tabbar-ic { filter: none; transform: translateY(-1px); }
+.tabbar-btn.active .tabbar-ic { opacity: 1; transform: translateY(-1px); }
 
 .pill-btn {
   background: var(--grad); color: #fff; border: none;
-  padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 800;
+  padding: 9px 15px; border-radius: 999px; font-size: 14px; font-weight: 800;
   cursor: pointer; font-family: var(--sans); transition: transform .12s;
+  display: inline-flex; align-items: center; gap: 5px;
 }
+.pill-btn svg { width: 16px; height: 16px; }
 .pill-btn:active { transform: scale(.96); }
 
 /* 記錄列改成可點(編輯/刪除),右側 chevron */
 .entry { cursor: pointer; transition: filter .15s; }
 .entry:hover { filter: brightness(1.12); }
-.entry-chev { color: var(--faint); font-size: 20px; font-weight: 700; flex: none; }
+.entry-chev { color: var(--faint); flex: none; display: grid; place-items: center; }
+.entry-chev svg { width: 20px; height: 20px; }
 
 /* 危險動作按鈕 */
 .btn-danger {
@@ -430,7 +447,8 @@ body {
 .video-embed { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); overflow: hidden; margin: 4px 0 6px; background: #000; }
 .video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .video-link { display: inline-block; margin: 4px 0 6px; color: var(--accent); font-weight: 700; font-size: 14px; }
-.ghost-btn.fullw { width: 100%; padding: 12px; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-weight: 700; }
+.ghost-btn.fullw { width: 100%; padding: 12px; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ghost-btn.fullw svg { width: 18px; height: 18px; }
 .rd-actions { margin-top: 26px; }
 .rd-row { display: flex; gap: 10px; margin-top: 10px; }
 .rd-row .ghost-btn {

@@ -55,8 +55,8 @@
       </div>
       <div class="topbar-right">
         <span id="who" class="who"></span>
-        <button id="open-profile" class="ghost-btn" title="每日目標設定">🎯 目標</button>
-        <button id="logout" class="ghost-btn" title="登出">登出</button>
+        <button id="open-profile" class="icon-btn" title="每日目標設定"><span data-ico="target"></span></button>
+        <button id="logout" class="icon-btn" title="登出"><span data-ico="logout"></span></button>
       </div>
     </header>
 
@@ -131,16 +131,16 @@
     <!-- 記錄入口 -->
     <section class="actions" id="app-actions">
       <button class="action" id="act-photo">
-        <span class="action-icon">📷</span><span>拍照/選圖</span>
+        <span class="action-icon" data-ico="camera"></span><span>拍照/選圖</span>
       </button>
       <button class="action" id="act-scan">
-        <span class="action-icon">🏷️</span><span>掃條碼</span>
+        <span class="action-icon" data-ico="scan"></span><span>掃條碼</span>
       </button>
       <button class="action" id="act-manual">
-        <span class="action-icon">✏️</span><span>手動輸入</span>
+        <span class="action-icon" data-ico="pencil"></span><span>手動輸入</span>
       </button>
       <button class="action" id="act-fav">
-        <span class="action-icon">⭐</span><span>常用食物</span>
+        <span class="action-icon" data-ico="star"></span><span>常用食物</span>
       </button>
     </section>
     <!-- 不加 capture:點下去跳系統選單(相機 / 相簿 / 檔案),可拍照也可選圖 -->
@@ -161,7 +161,7 @@
     <div id="view-recipes" hidden>
       <div class="list-head">
         <h2>我的食譜</h2>
-        <button class="pill-btn" id="recipe-add">＋ 新增食譜</button>
+        <button class="pill-btn" id="recipe-add"><span data-ico="plus"></span>新增食譜</button>
       </div>
       <div id="recipe-list" class="recipe-list"></div>
       <p id="recipe-empty" class="empty-hint" hidden>還沒有食譜,點右上角「新增食譜」記第一道吧。</p>
@@ -180,9 +180,9 @@
 
     <!-- 底部分頁 -->
     <nav class="tabbar">
-      <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic">🏠</span>首頁</button>
-      <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic">📊</span>趨勢</button>
-      <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic">📖</span>食譜</button>
+      <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic" data-ico="home"></span>首頁</button>
+      <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic" data-ico="chart"></span>趨勢</button>
+      <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic" data-ico="book"></span>食譜</button>
     </nav>
   </div>
 

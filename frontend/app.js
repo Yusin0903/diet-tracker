@@ -55,6 +55,31 @@ async function api(path, { method = "GET", body, isForm = false } = {}) {
 // ---------- DOM refs ----------
 const $ = (id) => document.getElementById(id);
 const authScreen = $("auth-screen");
+
+// ---------- 線條圖示(取代 emoji,讓介面像真實 App) ----------
+const ICONS = {
+  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/>',
+  pencil: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8z"/>',
+  home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
+  chart: '<path d="M5 21V4"/><path d="M5 21h16"/><path d="M9 21v-6M14 21V9M19 21v-9"/>',
+  book: '<path d="M5 19.5A2.5 2.5 0 0 1 7.5 17H19"/><path d="M7.5 3H19v18H7.5A2.5 2.5 0 0 1 5 18.5v-13A2.5 2.5 0 0 1 7.5 3z"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-4.5-4.5L5 21"/>',
+};
+function ico(name, cls = "") {
+  return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+}
+// 把 HTML 裡所有 [data-ico] 換成對應的 SVG(啟動時跑一次)
+function renderIcons() {
+  document.querySelectorAll("[data-ico]").forEach((el) => {
+    el.innerHTML = ico(el.dataset.ico);
+  });
+}
 const appScreen = $("app-screen");
 
 // ========================================================================
@@ -219,7 +244,7 @@ async function loadSummary() {
     let cls, note;
     if (s.status.tdee === "over") {
       cls = "state-red";
-      note = `🚨 超過 TDEE +${cal - s.targets.tdee} kcal`;
+      note = `超過 TDEE +${cal - s.targets.tdee} kcal`;
     } else if (s.status.calories === "in_range") {
       cls = "state-green";
       note = `達標 ✓ 目標 ${s.targets.calories_min}–${s.targets.calories_max}`;
@@ -249,16 +274,16 @@ async function loadSummary() {
     $("pro-fill").style.width = Math.min(100, (pro / pmin) * 100) + "%";
     const met = s.status.protein === "met";
     proCard.classList.toggle("met", met);
-    $("pro-note").textContent = met ? "蛋白達標 💪" : `還差 ${s.remaining.protein_to_min} g`;
+    $("pro-note").textContent = met ? "蛋白達標 ✓" : `還差 ${s.remaining.protein_to_min} g`;
     const alert = $("protein-alert");
     alert.hidden = met;
     if (!met)
-      alert.textContent = `⚠️ 蛋白質還差 ${s.remaining.protein_to_min}g 才到 ${pmin}g`;
+      alert.textContent = `蛋白質還差 ${s.remaining.protein_to_min}g 才到 ${pmin}g`;
   }
 }
 
 // ---------- Entries ----------
-const SOURCE_BADGE = { photo: "📷", manual: "✏️", favorite: "⭐", barcode: "🏷️", recipe: "📖" };
+const SOURCE_ICON = { photo: "camera", manual: "pencil", favorite: "star", barcode: "scan", recipe: "book" };
 
 async function loadEntries() {
   const entries = await api(tzq("/api/entries") + dateParam());
@@ -274,7 +299,7 @@ async function loadEntries() {
       hour12: false,
     });
     li.innerHTML = `
-      <span class="entry-badge">${SOURCE_BADGE[e.source] || "🍽️"}</span>
+      <span class="entry-badge">${ico(SOURCE_ICON[e.source] || "pencil")}</span>
       <div class="entry-main">
         <div class="entry-name"></div>
         <div class="entry-sub">${time}${e.note ? " · " + escapeHtml(e.note) : ""}</div>
@@ -283,7 +308,7 @@ async function loadEntries() {
         <div class="entry-cal">${e.calories}</div>
         <div class="entry-pro">${e.protein_g}g</div>
       </div>
-      <span class="entry-chev">›</span>`;
+      <span class="entry-chev">${ico("chevron")}</span>`;
     li.querySelector(".entry-name").textContent = e.name;
     li.addEventListener("click", () => openEntryEdit(e)); // 點整列 → 編輯/刪除
     list.appendChild(li);
@@ -305,7 +330,7 @@ function openEntryEdit(e) {
      <label class="field"><span>備註(可選)</span>
        <input id="e-note" type="text" value="${escapeAttr(e.note || "")}" /></label>
      <button class="btn-primary" id="e-save">儲存</button>
-     <button class="ghost-btn fullw" id="e-fav">⭐ 加入常用</button>
+     <button class="ghost-btn fullw" id="e-fav">${ico("star")} 加入常用</button>
      <button class="btn-danger" id="e-del">刪除這筆記錄</button>`
   );
   $("e-fav").addEventListener("click", async () => {
@@ -318,7 +343,7 @@ function openEntryEdit(e) {
     }
     try {
       await api("/api/foods", { method: "POST", body: { name, calories, protein_g } });
-      toast("已加入常用 ⭐");
+      toast("已加入常用");
     } catch (err) {
       toast(err.message, true);
     }
@@ -457,8 +482,8 @@ function openPhoto() {
     "新增照片",
     `<p class="items-hint">要用相機拍,還是從相簿 / 檔案選一張?</p>
      <div class="choice-row">
-       <button class="choice-btn" id="ph-cam"><span class="choice-ic">📷</span>拍照</button>
-       <button class="choice-btn" id="ph-lib"><span class="choice-ic">🖼️</span>從相簿選</button>
+       <button class="choice-btn" id="ph-cam"><span class="choice-ic">${ico("camera")}</span>拍照</button>
+       <button class="choice-btn" id="ph-lib"><span class="choice-ic">${ico("image")}</span>從相簿選</button>
      </div>`
   );
   $("ph-cam").addEventListener("click", () => pickPhoto(true));
@@ -1154,7 +1179,7 @@ async function loadRecipes() {
           <div class="recipe-name"></div>
           <div class="recipe-meta">${meta.map((m) => `<span>${escapeHtml(m)}</span>`).join("")}</div>
         </div>
-        <span class="entry-chev">›</span>`;
+        <span class="entry-chev">${ico("chevron")}</span>`;
       card.querySelector(".recipe-name").textContent = r.name;
       card.addEventListener("click", () => openRecipeDetail(r));
       list.appendChild(card);
@@ -1177,9 +1202,9 @@ function openRecipeDetail(r) {
   const ing = splitLines(r.ingredients);
   const steps = splitLines(r.steps);
   const chips = [];
-  if (r.calories != null) chips.push(`🔥 ${r.calories} kcal/份`);
-  if (r.protein_g != null) chips.push(`💪 ${r.protein_g}g 蛋白`);
-  if (r.servings != null) chips.push(`🍽️ ${r.servings} 份`);
+  if (r.calories != null) chips.push(`${r.calories} kcal/份`);
+  if (r.protein_g != null) chips.push(`蛋白 ${r.protein_g}g`);
+  if (r.servings != null) chips.push(`${r.servings} 份`);
   const vid = ytId(r.video_url);
   const videoHtml = vid
     ? `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${vid}" title="食譜影片" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
@@ -1373,6 +1398,7 @@ function setupApp() {
     if (col && col.dataset.date) goToDate(col.dataset.date);
   });
   $("recipe-add").addEventListener("click", () => openRecipeForm(null));
+  renderIcons();
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {
     if (e.target === $("modal")) closeModal();
