@@ -6,6 +6,18 @@ A diet-logging tool built around one core value: **log fast + auto-total against
 
 It has a **member system**: an **invite code** is required to register (no open sign-up), and each member's data is fully isolated.
 
+## Design
+
+The interface is the **"Orange"** theme: warm sun-orange (`#E8732E`) on cream paper (`#FBF4ED`), with **Shippori Mincho** for titles and big numbers and **Zen Kaku Gothic New** for body copy. The centrepiece is a round mascot dog whose belly fills like a water level as you eat through the day, shifting colour as you move toward — and past — your daily target.
+
+| Token | Value | Role |
+|---|---|---|
+| `--accent` | `#E8732E` | Primary CTA / sun orange |
+| `--accent-soft` | `#F4A06A` | Fills, secondary bars |
+| `--paper` | `#FBF4ED` | App background (cream paper) |
+| `--ink` | `#2E2620` | Primary text |
+| `--line` | `#F2E4D7` | Hairlines / tracks |
+
 ## Screenshots
 
 | Home (mascot vs. target) | Trend (week / month) | Recipe detail |
@@ -180,10 +192,10 @@ Goal adjustment: cut −400, maintain 0, bulk +250 kcal (override via `calorie_a
 
 ### The home-screen mascot
 
-The calorie visual is a **round mascot** whose belly fills like a water level as you eat through the day:
+The calorie visual is a **round mascot dog** whose belly fills like a water level as you eat through the day:
 
-- Below target → blue, half-empty.
-- Inside the calorie target range → **turns green with a "goal met" glow**.
+- Below target → light orange, half-empty (gentle "eat a bit more").
+- Inside the calorie target range → **soft-orange fill with a warm "goal met" glow**.
 - Over target but still under TDEE → amber warning.
 - **Over TDEE → it turns red, puffs up, overflows with drips over its head, face looks stuffed**, and shows "over TDEE by N kcal".
 

@@ -3,23 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0b0f" />
+  <meta name="theme-color" content="#FBF4ED" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <title>飲控</title>
 </head>
 <body>
-  <!-- 登入 / 註冊 -->
+  <!-- Login / register -->
   <div id="auth-screen" class="screen">
     <div class="auth-card">
       <div class="brand">
         <span class="brand-dot"></span>
         <h1>飲控</h1>
       </div>
-      <p class="brand-sub">快速記錄 · 對照每日目標</p>
+      <p class="brand-sub">好好吃飯,好好記錄 · 對照每日目標</p>
 
       <div class="tabs" id="auth-tabs">
         <button class="tab active" data-mode="login">登入</button>
@@ -45,7 +48,7 @@
     </div>
   </div>
 
-  <!-- 主畫面 -->
+  <!-- Main app -->
   <div id="app-screen" class="screen" hidden>
     <header class="topbar">
       <div class="brand small">
@@ -60,10 +63,10 @@
       </div>
     </header>
 
-    <!-- ===== 首頁 view ===== -->
+    <!-- ===== Home view ===== -->
     <div id="view-home">
 
-    <!-- 日期切換(可往前翻看過往紀錄) -->
+    <!-- Date switcher (page back to look at past records) -->
     <div class="date-bar">
       <button id="date-prev" class="date-arrow" aria-label="前一天">‹</button>
       <button id="date-center" class="date-center">
@@ -73,7 +76,7 @@
       <button id="date-next" class="date-arrow" aria-label="後一天">›</button>
     </div>
 
-    <!-- HERO:吉祥物熱量 + 蛋白條 -->
+    <!-- HERO: mascot calorie gauge + protein bar -->
     <section class="hero-mascot">
       <div class="mascot-card state-blue" id="cal-card">
         <div class="mascot-wrap">
@@ -81,19 +84,24 @@
             <defs>
               <clipPath id="bodyClip"><circle cx="100" cy="120" r="72" /></clipPath>
             </defs>
-            <!-- 溢出時頭頂的水滴 -->
+            <!-- Ears (drawn first so the body overlaps their base) -->
+            <g class="ears">
+              <ellipse class="ear" cx="54" cy="72" rx="20" ry="30" transform="rotate(-20 54 72)" />
+              <ellipse class="ear" cx="146" cy="72" rx="20" ry="30" transform="rotate(20 146 72)" />
+            </g>
+            <!-- Drips above the head when overflowing -->
             <g id="drips" class="drips" hidden>
               <ellipse class="drip d1" cx="66" cy="44" rx="5" ry="7" />
               <ellipse class="drip d2" cx="134" cy="40" rx="4" ry="6" />
               <ellipse class="drip d3" cx="100" cy="34" rx="4.5" ry="6.5" />
             </g>
-            <!-- 身體 -->
+            <!-- Body -->
             <circle class="mascot-body" cx="100" cy="120" r="72" />
-            <!-- 水位(裁切在身體內) -->
+            <!-- Water level (clipped inside the body) -->
             <g clip-path="url(#bodyClip)">
               <path id="liquid" class="liquid" d="" />
             </g>
-            <!-- 臉 -->
+            <!-- Face -->
             <g class="face">
               <g id="eyes-normal">
                 <circle class="eye" cx="80" cy="108" r="6" />
@@ -103,9 +111,10 @@
                 <path class="eye-line" d="M72,110 l8,-7 l8,7" />
                 <path class="eye-line" d="M112,110 l8,-7 l8,7" />
               </g>
-              <circle class="cheek" id="cheekL" cx="68" cy="126" r="8" hidden />
-              <circle class="cheek" id="cheekR" cx="132" cy="126" r="8" hidden />
-              <path class="mouth" id="mouth" d="M86,134 Q100,144 114,134" />
+              <ellipse class="nose" cx="100" cy="124" rx="8" ry="5.5" />
+              <circle class="cheek" id="cheekL" cx="68" cy="130" r="8" hidden />
+              <circle class="cheek" id="cheekR" cx="132" cy="130" r="8" hidden />
+              <path class="mouth" id="mouth" d="M86,138 Q100,148 114,138" />
             </g>
           </svg>
         </div>
@@ -128,7 +137,7 @@
 
     <div id="protein-alert" class="alert" hidden></div>
 
-    <!-- 記錄入口 -->
+    <!-- Log entry points -->
     <section class="actions" id="app-actions">
       <button class="action" id="act-photo">
         <span class="action-icon" data-ico="camera"></span><span>拍照/選圖</span>
@@ -143,10 +152,11 @@
         <span class="action-icon" data-ico="star"></span><span>常用食物</span>
       </button>
     </section>
-    <!-- 不加 capture:點下去跳系統選單(相機 / 相簿 / 檔案),可拍照也可選圖 -->
+    <!-- No capture attr: tapping opens the system sheet (camera / album / files),
+         so the user can shoot a photo or pick an existing one. -->
     <input id="camera-input" type="file" accept="image/*" hidden />
 
-    <!-- 當日記錄 -->
+    <!-- The selected day's records -->
     <section class="list-section">
       <div class="list-head">
         <h2>記錄</h2>
@@ -157,7 +167,7 @@
 
     </div><!-- /view-home -->
 
-    <!-- ===== 食譜 view ===== -->
+    <!-- ===== Recipes view ===== -->
     <div id="view-recipes" hidden>
       <div class="list-head">
         <h2>我的食譜</h2>
@@ -167,7 +177,7 @@
       <p id="recipe-empty" class="empty-hint" hidden>還沒有食譜,點右上角「新增食譜」記第一道吧。</p>
     </div>
 
-    <!-- ===== 趨勢 view ===== -->
+    <!-- ===== Trends view ===== -->
     <div id="view-stats" hidden>
       <div class="list-head"><h2>熱量趨勢</h2></div>
       <div class="seg" id="stats-seg">
@@ -178,7 +188,7 @@
       <div id="stats-cards" class="stats-cards"></div>
     </div>
 
-    <!-- 底部分頁 -->
+    <!-- Bottom tab bar -->
     <nav class="tabbar">
       <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic" data-ico="home"></span>首頁</button>
       <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic" data-ico="chart"></span>趨勢</button>
@@ -186,7 +196,7 @@
     </nav>
   </div>
 
-  <!-- 通用 modal -->
+  <!-- Generic modal -->
   <div id="modal" class="modal-overlay" hidden>
     <div class="modal">
       <div class="modal-head">

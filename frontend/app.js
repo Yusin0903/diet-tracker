@@ -1,7 +1,8 @@
 "use strict";
 
 const TOKEN_KEY = "diet_token";
-// 自動偵測這台裝置的時區,讓「今天」依使用者所在時區計算(後端沒帶就退回台北)。
+// Auto-detect this device's timezone so "today" is computed in the user's
+// own zone (the backend falls back to Taipei if it isn't sent).
 const TZ =
   (Intl.DateTimeFormat().resolvedOptions().timeZone) || "Asia/Taipei";
 const tzq = (path) => path + (path.includes("?") ? "&" : "?") + "tz=" + encodeURIComponent(TZ);
@@ -10,10 +11,10 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY) || null,
   username: localStorage.getItem("diet_user") || "",
   authMode: "login",
-  viewDate: startOfToday(), // 目前在看哪一天(可往前翻歷史)
+  viewDate: startOfToday(), // Which day we're currently looking at (can page back)
 };
 
-// ---------- 日期工具 ----------
+// ---------- Date helpers ----------
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -56,7 +57,7 @@ async function api(path, { method = "GET", body, isForm = false } = {}) {
 const $ = (id) => document.getElementById(id);
 const authScreen = $("auth-screen");
 
-// ---------- 線條圖示(取代 emoji,讓介面像真實 App) ----------
+// ---------- Line icons (replace emoji so the UI feels like a real app) ----------
 const ICONS = {
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/>',
   scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/>',
@@ -74,7 +75,7 @@ const ICONS = {
 function ico(name, cls = "") {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 }
-// 把 HTML 裡所有 [data-ico] 換成對應的 SVG(啟動時跑一次)
+// Swap every [data-ico] in the HTML for its SVG (run once at boot)
 function renderIcons() {
   document.querySelectorAll("[data-ico]").forEach((el) => {
     el.innerHTML = ico(el.dataset.ico);
@@ -83,7 +84,7 @@ function renderIcons() {
 const appScreen = $("app-screen");
 
 // ========================================================================
-// 認證
+// Auth
 // ========================================================================
 function setupAuth() {
   const tabs = $("auth-tabs");
@@ -138,7 +139,7 @@ function doLogout() {
 }
 
 // ========================================================================
-// 主畫面
+// Main screen
 // ========================================================================
 function showApp() {
   authScreen.hidden = true;
@@ -154,7 +155,7 @@ async function refresh() {
   await Promise.all([loadSummary(), loadEntries()]);
 }
 
-// 更新日期列、依是否為今天調整可記錄入口
+// Update the date bar and toggle the log entry points based on whether it's today.
 function updateDateBar() {
   const today = startOfToday();
   const diff = Math.round((today - state.viewDate) / 86400000);
@@ -166,8 +167,8 @@ function updateDateBar() {
   $("date-main").textContent = label;
   const wk = "日一二三四五六"[state.viewDate.getDay()];
   $("date-sub").textContent = ymd(state.viewDate) + " 週" + wk;
-  $("date-next").disabled = isViewingToday(); // 不能看未來
-  // 看歷史時隱藏記錄入口(新增一律記到今天)
+  $("date-next").disabled = isViewingToday(); // Can't view the future
+  // Hide the log entry points when viewing history (new logs always go to today)
   const past = !isViewingToday();
   $("app-actions").hidden = past;
   $("camera-input").disabled = past;
@@ -176,7 +177,7 @@ function updateDateBar() {
 function shiftDate(days) {
   const d = new Date(state.viewDate);
   d.setDate(d.getDate() + days);
-  if (d > startOfToday()) return; // 擋未來
+  if (d > startOfToday()) return; // Block the future
   state.viewDate = d;
   refresh();
 }
@@ -186,7 +187,7 @@ function goToday() {
   refresh();
 }
 
-// 從趨勢長條跳到某天的首頁記錄
+// Jump from a trend bar to that day's home record.
 function goToDate(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
   d.setHours(0, 0, 0, 0);
@@ -196,11 +197,11 @@ function goToDate(dateStr) {
   refresh();
 }
 
-// ---------- Summary / 吉祥物 ----------
-// 水位 path:依比例 frac(0~1+)畫出有波浪頂的液體,裁切在身體圓內。
+// ---------- Summary / mascot ----------
+// Liquid path: draws a wavy-topped fluid at ratio `frac` (0..1+), clipped inside the body circle.
 function liquidPath(frac) {
   const left = 24, right = 176, bottom = 196, fullTop = 44;
-  const f = Math.max(0.02, Math.min(frac, 1.12)); // 容許略微溢出視覺
+  const f = Math.max(0.02, Math.min(frac, 1.12)); // Allow a slight visual overflow
   const y = bottom - f * (bottom - fullTop);
   const half = (right - left) / 2;
   const amp = 6;
@@ -219,7 +220,7 @@ function setMascotState(cls) {
   $("drips").hidden = !stuffed;
   $("mouth").setAttribute(
     "d",
-    stuffed ? "M84,136 q8,9 16,0 q8,-9 16,0" : "M86,134 Q100,144 114,134"
+    stuffed ? "M84,140 q8,9 16,0 q8,-9 16,0" : "M86,138 Q100,148 114,138"
   );
 }
 
@@ -229,16 +230,16 @@ async function loadSummary() {
   const pro = s.consumed.protein_g;
   $("cal-value").textContent = cal;
 
-  // === 熱量吉祥物 ===
+  // === Calorie mascot ===
   if (!s.has_profile) {
-    // 沒設定身體數據:不評估,只顯示熱量,吉祥物維持中性、半滿。
+    // No body data: don't evaluate, just show calories; mascot stays neutral and half-full.
     setMascotState("state-blue");
     $("liquid").setAttribute("d", liquidPath(0.4));
     $("cal-note").textContent = "今天吃了";
     $("setup-cta").hidden = false;
   } else {
     $("setup-cta").hidden = true;
-    const cap = s.cap; // TDEE 優先,否則熱量上限
+    const cap = s.cap; // TDEE first, otherwise the calorie ceiling
     $("liquid").setAttribute("d", liquidPath(cal / cap));
 
     let cls, note;
@@ -259,7 +260,7 @@ async function loadSummary() {
     $("cal-note").textContent = note;
   }
 
-  // === 蛋白條 ===
+  // === Protein bar ===
   const proCard = $("pro-card");
   $("pro-value").textContent = pro;
   if (!s.has_profile) {
@@ -310,12 +311,12 @@ async function loadEntries() {
       </div>
       <span class="entry-chev">${ico("chevron")}</span>`;
     li.querySelector(".entry-name").textContent = e.name;
-    li.addEventListener("click", () => openEntryEdit(e)); // 點整列 → 編輯/刪除
+    li.addEventListener("click", () => openEntryEdit(e)); // Tap the row → edit / delete
     list.appendChild(li);
   }
 }
 
-// 點記錄 → 編輯欄位或刪除(取代以前直接的 ✕)
+// Tap an entry → edit fields or delete (replaces the old direct ✕).
 function openEntryEdit(e) {
   openModal(
     "編輯記錄",
@@ -383,7 +384,7 @@ function openEntryEdit(e) {
 async function createEntry(payload) {
   await api(tzq("/api/entries"), { method: "POST", body: payload });
   closeModal();
-  state.viewDate = startOfToday(); // 新記錄記在今天,切回今天讓使用者看到
+  state.viewDate = startOfToday(); // New logs go to today, so jump back so the user sees them
   await refresh();
   toast("已記錄 ✓");
 }
@@ -397,7 +398,7 @@ function openModal(title, html) {
   $("modal").hidden = false;
 }
 function closeModal() {
-  stopScan(); // 關閉 modal 時務必停掉相機
+  stopScan(); // Always stop the camera when the modal closes
   $("modal").hidden = true;
   $("modal-body").innerHTML = "";
 }
@@ -422,7 +423,7 @@ function confirmForm(prefill, source) {
 }
 
 function bindConfirm() {
-  const servEl = document.getElementById("m-serv"); // 條碼結果表單沒有份數,改用克數
+  const servEl = document.getElementById("m-serv"); // Barcode results have no servings field, they use grams instead
   const totalEl = document.getElementById("m-total");
 
   const recalc = () => {
@@ -465,18 +466,19 @@ function bindConfirm() {
   });
 }
 
-// ---------- 手動輸入 ----------
+// ---------- Manual input ----------
 function openManual() {
   openModal("手動輸入", confirmForm({}, "manual"));
   bindConfirm();
 }
 
-// ---------- 拍照分析 ----------
+// ---------- Photo analysis ----------
 let _photoFile = null;
 let _photoUrl = null;
 
-// 先讓使用者選「拍照」或「從相簿選」—— 拍照才會強制開相機(capture),
-// 相簿/檔案則不帶 capture。這樣 Android、iOS 兩邊都能用。
+// Let the user choose "take a photo" or "pick from album" first — only "take"
+// forces the camera (capture); album / files don't pass capture. Works on both
+// Android and iOS.
 function openPhoto() {
   openModal(
     "新增照片",
@@ -506,7 +508,8 @@ function handlePhoto(file) {
   photoHintStep("");
 }
 
-// 辨識前可選填文字補充(例:油條),一起送給 Gemini,大幅降低認錯機率
+// Before analysis the user can add an optional text hint (e.g. "youtiao"),
+// sent to Gemini alongside the image to cut the misrecognition rate sharply.
 function photoHintStep(hint) {
   openModal(
     "辨識食物照片",
@@ -554,7 +557,7 @@ async function runAnalyze() {
   }
 }
 
-// ---------- 常用食物 ----------
+// ---------- Favorite foods ----------
 async function openFavorites() {
   openModal("常用食物", `<div class="analyzing"><div class="spinner"></div></div>`);
   try {
@@ -583,7 +586,7 @@ async function openFavorites() {
       <button class="btn-primary" id="nf-save">新增到常用</button>`;
     $("modal-body").innerHTML = html;
 
-    // 綁定每個常用食物
+    // Wire up each favorite food
     $("modal-body").querySelectorAll(".fav-item").forEach((row) => {
       const id = row.dataset.id;
       const f = foods.find((x) => String(x.id) === id);
@@ -627,14 +630,14 @@ async function openFavorites() {
 }
 
 // ========================================================================
-// 掃條碼(相機即時掃 → 查 Open Food Facts → 確認份量再記)
+// Barcode scan (live camera → Open Food Facts lookup → confirm amount → log)
 // ========================================================================
 const OFF_FIELDS = "product_name,brands,nutriments,serving_quantity,serving_size";
 let scanStream = null;
 let scanTimer = null;
 let zxingReader = null;
 
-// 載入在地化的 ZXing(只在沒有原生 BarcodeDetector 時用,例如 iOS Safari)。
+// Load the bundled ZXing (only when there's no native BarcodeDetector, e.g. iOS Safari).
 function ensureZXing() {
   if (window.ZXing) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -646,7 +649,8 @@ function ensureZXing() {
   });
 }
 
-// 向 Open Food Facts 查條碼(前端直接打,公開資料、免金鑰)。查不到回 null。
+// Look up a barcode on Open Food Facts (queried directly from the frontend;
+// public data, no key). Returns null if not found.
 async function lookupBarcode(code) {
   const url =
     `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`;
@@ -688,7 +692,7 @@ function stopScan() {
   }
 }
 
-// 盡量請相機開「連續自動對焦」,並讓畫面解析度高一點(小條碼較好辨識)。
+// Ask the camera for continuous autofocus and a higher resolution so small barcodes scan better.
 function tuneCamera(stream) {
   try {
     const track = stream && stream.getVideoTracks && stream.getVideoTracks()[0];
@@ -725,7 +729,7 @@ async function openScan() {
     onBarcode(code);
   };
 
-  // 路徑 A:原生 BarcodeDetector(Android Chrome 等,最省電)
+  // Path A: native BarcodeDetector (Android Chrome etc., most power-efficient)
   if ("BarcodeDetector" in window) {
     try {
       scanStream = await navigator.mediaDevices.getUserMedia({
@@ -752,11 +756,11 @@ async function openScan() {
       tick();
       return;
     } catch (_) {
-      stopScan(); // 落到路徑 B 或手動
+      stopScan(); // Fall through to path B or manual
     }
   }
 
-  // 路徑 B:ZXing 純 JS 解碼(iOS Safari 等沒有 BarcodeDetector 的瀏覽器)
+  // Path B: ZXing pure-JS decode (browsers without BarcodeDetector, e.g. iOS Safari)
   try {
     if (!(await ensureZXing())) throw new Error("zxing load failed");
     zxingReader = new ZXing.BrowserMultiFormatReader();
@@ -776,9 +780,9 @@ async function openScan() {
         cb
       );
     } catch (_) {
-      await zxingReader.decodeFromVideoDevice(null, video, cb); // 退而求其次:預設鏡頭
+      await zxingReader.decodeFromVideoDevice(null, video, cb); // Fallback: default camera
     }
-    // ZXing 自己管理 stream;啟動後抓 video 上的 stream 來請求連續對焦
+    // ZXing manages its own stream; once started, grab the video's stream to request continuous focus
     setTimeout(() => tuneCamera(video.srcObject), 600);
   } catch (_) {
     openManualBarcode("無法啟動掃描(相機權限被拒或不支援),請手動輸入條碼:");
@@ -812,7 +816,7 @@ async function onBarcode(code) {
   try {
     prod = await lookupBarcode(code);
   } catch (_) {
-    // 網路或查詢錯誤,當作查不到處理
+    // Network or lookup error, treat as not found
   }
   if (!prod) {
     $("modal-title").textContent = "查不到商品";
@@ -825,7 +829,7 @@ async function onBarcode(code) {
   showBarcodeResult(prod);
 }
 
-// 通用:選「份數」記錄一筆(常用食物、條碼共用)。perCal/perPro 為「每份」量。
+// Shared: log one entry by choosing "servings" (favorites + barcodes). perCal/perPro are "per serving".
 function logWithServings({ name, perCal, perPro, unit, source }) {
   perCal = perCal || 0;
   perPro = perPro || 0;
@@ -873,7 +877,7 @@ function logWithServings({ name, perCal, perPro, unit, source }) {
 }
 
 function showBarcodeResult(prod) {
-  // 完全查不到營養 → 退回手動填(預填名稱)
+  // No nutrition at all → fall back to manual entry (prefilled name)
   if (prod.cal100 == null && prod.pro100 == null) {
     $("modal-title").textContent = "查不到營養";
     $("modal-body").innerHTML =
@@ -882,7 +886,7 @@ function showBarcodeResult(prod) {
     bindConfirm();
     return;
   }
-  // 以「份」為單位:有每份克數就換算成每份,否則以每 100g 當作一份
+  // Per "serving": convert with the per-serving grams if available, otherwise treat per 100g as one serving
   let perCal, perPro, unit;
   if (prod.servingG) {
     perCal = prod.cal100 != null ? Math.round((prod.cal100 * prod.servingG) / 100) : 0;
@@ -897,7 +901,7 @@ function showBarcodeResult(prod) {
 }
 
 // ========================================================================
-// 每日目標 / 身體數據設定
+// Daily targets / body data setup
 // ========================================================================
 const ACTIVITY_OPTS = [
   ["sedentary", "久坐(幾乎不運動)"],
@@ -1026,7 +1030,7 @@ function floatOrNull(v) {
 }
 
 // ========================================================================
-// 分頁切換(首頁 / 食譜)
+// View switching (home / recipes / trends)
 // ========================================================================
 function showView(name) {
   $("view-home").hidden = name !== "home";
@@ -1040,13 +1044,13 @@ function showView(name) {
 }
 
 // ========================================================================
-// 趨勢(本週 / 本月 熱量長條圖 + 目標上下限)
+// Trends (week / month calorie bar chart + target min/max)
 // ========================================================================
 let statsRange = "week";
 
 function weekRange() {
   const t = startOfToday();
-  const mondayOffset = (t.getDay() + 6) % 7; // 週一=0
+  const mondayOffset = (t.getDay() + 6) % 7; // Monday = 0
   const start = new Date(t);
   start.setDate(t.getDate() - mondayOffset);
   const end = new Date(start);
@@ -1088,14 +1092,14 @@ function renderStats(data) {
   const days = data.days;
   const todayStr = ymd(startOfToday());
   const cals = days.map((d) => d.calories);
-  // 縮放上限:資料、目標上限、TDEE 取最大,再留 12% 空間
+  // Scale ceiling: max of data, target ceiling and TDEE, plus 12% headroom
   let top = Math.max(...cals, t ? t.calories_max : 0, t && t.tdee ? t.tdee : 0, 100);
   top = top * 1.12;
-  const H = 188; // 繪圖區高度 px
+  const H = 188; // Plot area height in px
   const y = (v) => Math.max(0, Math.min(H, (v / top) * H));
   const month = statsRange === "month";
 
-  // 目標帶(下限~上限)與 TDEE 線
+  // Target band (min~max) and TDEE line
   let bands = "";
   if (t) {
     const yMin = y(t.calories_min);
@@ -1113,7 +1117,7 @@ function renderStats(data) {
       const lbl = month ? dd.getDate() : "日一二三四五六"[dd.getDay()];
       const showLbl = !month || dd.getDate() === 1 || dd.getDate() % 5 === 0;
       const isToday = d.date === todayStr ? " is-today" : "";
-      const tappable = d.date <= todayStr ? " tappable" : ""; // 未來日不可點
+      const tappable = d.date <= todayStr ? " tappable" : ""; // Future days aren't tappable
       return `<div class="bar-col${isToday}${tappable}" data-date="${d.date}">
           <div class="bar-wrap"><div class="bar ${calClass(d.calories, t)}" style="height:${h}px"></div></div>
           <div class="bar-lbl">${showLbl ? lbl : ""}</div>
@@ -1125,7 +1129,7 @@ function renderStats(data) {
     <div class="plot" style="height:${H}px">${bands}<div class="bars ${month ? "dense" : ""}">${bars}</div></div>
     <p class="chart-hint">點長條看那天的記錄</p>`;
 
-  // 統計卡:平均、達標天數、平均缺口
+  // Stat cards: average, on-target days, average gap
   const logged = days.filter((d) => d.calories > 0);
   const avg = logged.length ? Math.round(logged.reduce((s, d) => s + d.calories, 0) / logged.length) : 0;
   const cards = [];
@@ -1134,7 +1138,7 @@ function renderStats(data) {
     const onTarget = logged.filter((d) => d.calories >= t.calories_min && d.calories <= t.calories_max).length;
     cards.push(statCard("達標天數", `${onTarget}`, `/ ${logged.length} 天`));
     if (t.tdee && logged.length) {
-      const gap = Math.round(t.tdee - avg); // 正=赤字
+      const gap = Math.round(t.tdee - avg); // Positive = deficit
       cards.push(statCard(gap >= 0 ? "平均赤字" : "平均盈餘", `${Math.abs(gap)}`, "kcal/天", gap >= 0 ? "good" : "bad"));
     }
   }
@@ -1155,7 +1159,7 @@ function statCard(label, value, unit, tone) {
 }
 
 // ========================================================================
-// 食譜
+// Recipes
 // ========================================================================
 const splitLines = (s) =>
   (s || "").split("\n").map((x) => x.trim()).filter(Boolean);
@@ -1189,7 +1193,7 @@ async function loadRecipes() {
   }
 }
 
-// 從各種 YouTube 連結格式抽出 11 碼影片 ID
+// Pull the 11-char video ID out of any YouTube URL format
 function ytId(url) {
   if (!url) return null;
   const m = String(url).match(
@@ -1244,7 +1248,7 @@ function openRecipeDetail(r) {
   });
 }
 
-// 記一份食譜:可選份數,自動換算熱量/蛋白
+// Log one serving of a recipe: choose servings, auto-convert calories / protein
 function logRecipe(r) {
   const cal = r.calories || 0;
   const pro = r.protein_g || 0;

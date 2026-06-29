@@ -1,5 +1,5 @@
-// Service worker:只快取靜態檔(殼),API 一律走網路。
-const CACHE = "diet-shell-v18";
+// Service worker: caches only static files (the shell); API always hits the network.
+const CACHE = "diet-shell-v19";
 const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -18,11 +18,11 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  // API 與非 GET:不快取,直接走網路。
+  // API and non-GET requests: don't cache, go straight to the network.
   if (url.pathname.startsWith("/api/") || e.request.method !== "GET") {
-    return; // 交給瀏覽器預設處理
+    return; // Let the browser handle it by default
   }
-  // 靜態檔:cache-first,失敗再打網路。
+  // Static files: cache-first, fall back to the network.
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request))
   );
