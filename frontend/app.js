@@ -60,9 +60,9 @@ const authScreen = $("auth-screen");
 
 // ---------- Line icons (replace emoji so the UI feels like a real app) ----------
 const ICONS = {
-  camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/>',
+  camera: '<path d="M21 19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2.5l1.8-2.6h5.4l1.8 2.6H19a2 2 0 0 1 2 2z"/><circle cx="12" cy="13.5" r="3.6"/>',
   scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/>',
-  pencil: '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M13.5 6.5l3 3"/>',
+  pencil: '<path d="M5 19l-1.2 1.2.3-4.2L15.8 4.8a2.2 2.2 0 0 1 3.1 3.1L8 18.9z"/><path d="M13.8 6.8l3.1 3.1"/>',
   star: '<path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.6l5.8-.8z"/>',
   home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
   chart: '<path d="M5 21V4"/><path d="M5 21h16"/><path d="M9 21v-6M14 21V9M19 21v-9"/>',

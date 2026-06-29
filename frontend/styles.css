@@ -36,9 +36,13 @@
   --radius-sm: 16px;
   --shadow: 0 18px 50px rgba(46, 38, 32, .10);
   --shadow-sm: 0 8px 22px rgba(46, 38, 32, .07);
-  --serif: "Shippori Mincho", "Songti TC", "Noto Serif TC", serif;
-  --sans: "Zen Kaku Gothic New", -apple-system, BlinkMacSystemFont, "Segoe UI",
-          "Noto Sans TC", "PingFang TC", Roboto, sans-serif;
+  /* Headings: Noto Serif TC first so Traditional-Chinese glyphs render
+     consistently (Shippori Mincho lacks many TC codepoints). */
+  --serif: "Noto Serif TC", "Shippori Mincho", "Songti TC", serif;
+  /* Large Latin display numbers keep the Shippori mincho flavour. */
+  --serif-num: "Shippori Mincho", "Noto Serif TC", serif;
+  --sans: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang TC", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -181,7 +185,7 @@ body {
 }
 
 .mascot-readout { text-align: center; margin-top: 2px; }
-.big-num { font-family: var(--serif); font-weight: 600; line-height: 1; letter-spacing: -.5px; color: var(--ink); }
+.big-num { font-family: var(--serif-num); font-weight: 600; line-height: 1; letter-spacing: -.5px; color: var(--ink); }
 .big-num #cal-value { font-size: 54px; font-variant-numeric: tabular-nums; }
 .big-unit { font-family: var(--sans); font-size: 16px; color: var(--ink-faint); margin-left: 6px; font-weight: 400; }
 .mascot-note { font-size: 14px; color: var(--ink-dim); margin-top: 10px; min-height: 18px; font-weight: 600; }
@@ -201,7 +205,7 @@ body {
 .pro-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
 .pro-label { font-size: 14px; color: var(--ink-dim); font-weight: 600; }
 .pro-readout { font-size: 15px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.pro-readout b { font-family: var(--serif); font-size: 22px; color: var(--ink); font-weight: 600; }
+.pro-readout b { font-family: var(--serif-num); font-size: 22px; color: var(--ink); font-weight: 600; }
 .pro-track { height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; }
 .pro-fill { height: 100%; width: 0%; border-radius: 999px; background: var(--accent-soft); transition: width .7s cubic-bezier(.4,0,.2,1), background .4s; }
 .pro-bar-card.met .pro-fill { background: var(--accent); }
@@ -274,7 +278,7 @@ body {
 .entry-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .entry-sub { font-size: 12px; color: var(--ink-faint); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .entry-macro { text-align: right; font-variant-numeric: tabular-nums; }
-.entry-cal { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+.entry-cal { font-family: var(--serif-num); font-size: 17px; font-weight: 600; }
 .entry-pro { font-size: 12px; color: var(--accent); font-weight: 600; }
 .entry-del { background: transparent; border: none; color: var(--ink-faint); font-size: 17px; cursor: pointer; padding: 6px; border-radius: 9px; }
 .entry-del:hover { color: var(--bad); background: rgba(216,80,58,.1); }
@@ -331,7 +335,7 @@ body {
 
 .pf-preview { margin-top: 14px; padding: 16px; border-radius: var(--radius-sm); background: var(--card); border: 1px solid var(--line); }
 .pf-tdee { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.pf-tdee b { font-family: var(--serif); font-size: 26px; color: var(--accent); font-weight: 600; }
+.pf-tdee b { font-family: var(--serif-num); font-size: 26px; color: var(--accent); font-weight: 600; }
 .pf-detail { font-size: 13px; color: var(--ink-dim); margin-top: 8px; line-height: 1.6; font-variant-numeric: tabular-nums; }
 
 /* Small version line at the bottom of the settings sheet (About). */
@@ -428,7 +432,7 @@ body {
 
 .stats-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat-card { background: var(--card); border-radius: var(--radius-sm); padding: 14px 10px; text-align: center; box-shadow: var(--shadow-sm); }
-.stat-val { font-family: var(--serif); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat-val { font-family: var(--serif-num); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .stat-val span { font-family: var(--sans); font-size: 11px; color: var(--ink-dim); font-weight: 500; margin-left: 2px; }
 .stat-card.good .stat-val { color: var(--accent); }
 .stat-card.bad .stat-val { color: var(--bad); }
