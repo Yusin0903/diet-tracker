@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#FBF4ED" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <title>飲控</title>
+</head>
+<body>
+  <!-- Login / register -->
+  <div id="auth-screen" class="screen">
+    <div class="auth-card">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1>飲控</h1>
+      </div>
+      <p class="brand-sub">好好吃飯,好好記錄 · 對照每日目標</p>
+
+      <div class="tabs" id="auth-tabs">
+        <button class="tab active" data-mode="login">登入</button>
+        <button class="tab" data-mode="register">註冊</button>
+      </div>
+
+      <form id="auth-form" autocomplete="off">
+        <label class="field">
+          <span>帳號</span>
+          <input id="f-username" type="text" required minlength="2" placeholder="你的帳號" />
+        </label>
+        <label class="field">
+          <span>密碼</span>
+          <input id="f-password" type="password" required minlength="6" placeholder="至少 6 個字" />
+        </label>
+        <label class="field invite-field" id="invite-field" hidden>
+          <span>邀請碼</span>
+          <input id="f-invite" type="text" placeholder="沒有邀請碼無法註冊" />
+        </label>
+        <button type="submit" class="btn-primary" id="auth-submit">登入</button>
+        <p class="auth-error" id="auth-error"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app-screen" class="screen" hidden>
+    <header class="topbar">
+      <div class="brand small">
+        <span class="brand-dot"></span>
+        <span>飲控</span>
+        <span class="ver">v2</span>
+      </div>
+      <div class="topbar-right">
+        <span id="who" class="who"></span>
+        <button id="open-profile" class="icon-btn" title="每日目標設定"><span data-ico="target"></span></button>
+        <button id="logout" class="icon-btn" title="登出"><span data-ico="logout"></span></button>
+      </div>
+    </header>
+
+    <!-- ===== Home view ===== -->
+    <div id="view-home">
+
+    <!-- Date switcher (page back to look at past records) -->
+    <div class="date-bar">
+      <button id="date-prev" class="date-arrow" aria-label="前一天">‹</button>
+      <button id="date-center" class="date-center">
+        <span id="date-main">今天</span>
+        <span id="date-sub" class="list-date"></span>
+      </button>
+      <button id="date-next" class="date-arrow" aria-label="後一天">›</button>
+    </div>
+
+    <!-- HERO: mascot calorie gauge + protein bar -->
+    <section class="hero-mascot">
+      <div class="mascot-card state-blue" id="cal-card">
+        <div class="mascot-wrap">
+          <svg class="mascot" viewBox="0 0 200 215" id="mascot-svg" aria-hidden="true">
+            <defs>
+              <clipPath id="bodyClip"><circle cx="100" cy="120" r="72" /></clipPath>
+            </defs>
+            <!-- Ears (drawn first so the body overlaps their base) -->
+            <g class="ears">
+              <ellipse class="ear" cx="54" cy="72" rx="20" ry="30" transform="rotate(-20 54 72)" />
+              <ellipse class="ear" cx="146" cy="72" rx="20" ry="30" transform="rotate(20 146 72)" />
+            </g>
+            <!-- Drips above the head when overflowing -->
+            <g id="drips" class="drips" hidden>
+              <ellipse class="drip d1" cx="66" cy="44" rx="5" ry="7" />
+              <ellipse class="drip d2" cx="134" cy="40" rx="4" ry="6" />
+              <ellipse class="drip d3" cx="100" cy="34" rx="4.5" ry="6.5" />
+            </g>
+            <!-- Body -->
+            <circle class="mascot-body" cx="100" cy="120" r="72" />
+            <!-- Water level (clipped inside the body) -->
+            <g clip-path="url(#bodyClip)">
+              <path id="liquid" class="liquid" d="" />
+            </g>
+            <!-- Face -->
+            <g class="face">
+              <g id="eyes-normal">
+                <circle class="eye" cx="80" cy="108" r="6" />
+                <circle class="eye" cx="120" cy="108" r="6" />
+              </g>
+              <g id="eyes-stuffed" hidden>
+                <path class="eye-line" d="M72,110 l8,-7 l8,7" />
+                <path class="eye-line" d="M112,110 l8,-7 l8,7" />
+              </g>
+              <ellipse class="nose" cx="100" cy="124" rx="8" ry="5.5" />
+              <circle class="cheek" id="cheekL" cx="68" cy="130" r="8" hidden />
+              <circle class="cheek" id="cheekR" cx="132" cy="130" r="8" hidden />
+              <path class="mouth" id="mouth" d="M86,138 Q100,148 114,138" />
+            </g>
+          </svg>
+        </div>
+        <div class="mascot-readout">
+          <div class="big-num"><span id="cal-value">0</span><span class="big-unit">kcal</span></div>
+          <div class="mascot-note" id="cal-note">—</div>
+        </div>
+        <button class="setup-cta" id="setup-cta" hidden>設定身體數據,解鎖目標與進度圖 →</button>
+      </div>
+
+      <div class="pro-bar-card" id="pro-card">
+        <div class="pro-head">
+          <span class="pro-label">蛋白質</span>
+          <span class="pro-readout"><b id="pro-value">0</b><span id="pro-target"> g</span></span>
+        </div>
+        <div class="pro-track"><div class="pro-fill" id="pro-fill"></div></div>
+        <div class="mascot-note" id="pro-note">—</div>
+      </div>
+    </section>
+
+    <div id="protein-alert" class="alert" hidden></div>
+
+    <!-- Log entry points -->
+    <section class="actions" id="app-actions">
+      <button class="action" id="act-photo">
+        <span class="action-icon" data-ico="camera"></span><span>拍照/選圖</span>
+      </button>
+      <button class="action" id="act-scan">
+        <span class="action-icon" data-ico="scan"></span><span>掃條碼</span>
+      </button>
+      <button class="action" id="act-manual">
+        <span class="action-icon" data-ico="pencil"></span><span>手動輸入</span>
+      </button>
+      <button class="action" id="act-fav">
+        <span class="action-icon" data-ico="star"></span><span>常用食物</span>
+      </button>
+    </section>
+    <!-- No capture attr: tapping opens the system sheet (camera / album / files),
+         so the user can shoot a photo or pick an existing one. -->
+    <input id="camera-input" type="file" accept="image/*" hidden />
+
+    <!-- The selected day's records -->
+    <section class="list-section">
+      <div class="list-head">
+        <h2>記錄</h2>
+      </div>
+      <ul id="entry-list" class="entry-list"></ul>
+      <p id="empty-hint" class="empty-hint" hidden>這天還沒有記錄。</p>
+    </section>
+
+    </div><!-- /view-home -->
+
+    <!-- ===== Recipes view ===== -->
+    <div id="view-recipes" hidden>
+      <div class="list-head">
+        <h2>我的食譜</h2>
+        <button class="pill-btn" id="recipe-add"><span data-ico="plus"></span>新增食譜</button>
+      </div>
+      <div id="recipe-list" class="recipe-list"></div>
+      <p id="recipe-empty" class="empty-hint" hidden>還沒有食譜,點右上角「新增食譜」記第一道吧。</p>
+    </div>
+
+    <!-- ===== Trends view ===== -->
+    <div id="view-stats" hidden>
+      <div class="list-head"><h2>熱量趨勢</h2></div>
+      <div class="seg" id="stats-seg">
+        <button class="seg-btn active" data-range="week">本週</button>
+        <button class="seg-btn" data-range="month">本月</button>
+      </div>
+      <div id="stats-chart" class="stats-chart"></div>
+      <div id="stats-cards" class="stats-cards"></div>
+    </div>
+
+    <!-- Bottom tab bar -->
+    <nav class="tabbar">
+      <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic" data-ico="home"></span>首頁</button>
+      <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic" data-ico="chart"></span>趨勢</button>
+      <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic" data-ico="book"></span>食譜</button>
+    </nav>
+  </div>
+
+  <!-- Generic modal -->
+  <div id="modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-title">記錄</h3>
+        <button class="ghost-btn" id="modal-close">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
