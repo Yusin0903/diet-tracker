@@ -1,7 +1,7 @@
 {
-  "name": "飲控",
-  "short_name": "飲控",
-  "description": "快速記錄飲食,對照每日熱量與蛋白目標",
+  "name": "好好吃飯",
+  "short_name": "好好吃飯",
+  "description": "好好吃飯,好好記錄 — 對照每日熱量與蛋白目標",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

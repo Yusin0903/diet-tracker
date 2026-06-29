@@ -1,4 +1,4 @@
-# 飲控 App 🥗
+# 好好吃飯 🥗
 
 **繁體中文** · [English](README.md)
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const TOKEN_KEY = "diet_token";
+const APP_VERSION = "2.0"; // Shown small in the settings sheet (industry-standard "About" placement)
 // Auto-detect this device's timezone so "today" is computed in the user's
 // own zone (the backend falls back to Taipei if it isn't sent).
 const TZ =
@@ -959,7 +960,8 @@ async function openProfile() {
       <label class="field"><span>蛋白下限 (g)</span><input id="pf-pmin" type="number" inputmode="numeric" value="${p.protein_min ?? ""}" /></label>
     </div>
 
-    <button class="btn-primary" id="pf-save">儲存目標</button>`;
+    <button class="btn-primary" id="pf-save">儲存目標</button>
+    <div class="app-version">好好吃飯 · v${APP_VERSION}</div>`;
 
   let curMode = mode;
   $("pf-tabs").addEventListener("click", (e) => {
