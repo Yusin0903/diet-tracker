@@ -228,14 +228,17 @@ body {
 .action:hover { box-shadow: var(--shadow); }
 .action:active { transform: scale(.97); }
 .action-icon {
-  width: 46px; height: 46px; display: grid; place-items: center;
+  width: 46px; height: 46px; display: inline-flex; align-items: center; justify-content: center;
   background: var(--wash); border-radius: 14px; color: var(--accent);
 }
 .action-icon svg { width: 24px; height: 24px; }
 
 /* ---------- Line icons ---------- */
 .ico { width: 22px; height: 22px; display: block; }
-[data-ico] { display: inline-flex; }
+/* Center the SVG inside every [data-ico] host. Without align/justify the icon
+   sinks to a corner when the host is also a fixed-size box (.action-icon,
+   .tabbar-ic) — this keeps them dead-centered regardless of box size. */
+[data-ico] { display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn {
   background: transparent; border: none; color: var(--ink-dim); padding: 8px;
   border-radius: 11px; cursor: pointer; display: grid; place-items: center; transition: .15s;
@@ -355,7 +358,7 @@ body {
   padding: 5px; background: none; border: none; cursor: pointer; font-family: var(--sans);
   color: var(--ink-faint); font-size: 11px; font-weight: 600; transition: color .15s;
 }
-.tabbar-ic { display: grid; place-items: center; opacity: .8; transition: .15s; }
+.tabbar-ic { display: inline-flex; align-items: center; justify-content: center; opacity: .8; transition: .15s; }
 .tabbar-ic svg { width: 23px; height: 23px; }
 .tabbar-btn.active { color: var(--accent); }
 .tabbar-btn.active .tabbar-ic { opacity: 1; transform: translateY(-1px); }
