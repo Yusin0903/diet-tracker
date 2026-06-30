@@ -27,7 +27,8 @@ def client():
     with TestClient(app) as c:
         with db.get_cursor(commit=True) as cur:
             cur.execute(
-                "TRUNCATE users, entries, foods, profiles RESTART IDENTITY CASCADE"
+                "TRUNCATE users, entries, foods, profiles, recipes, "
+                "friendships, share_prefs RESTART IDENTITY CASCADE"
             )
         yield c
 
@@ -226,6 +227,41 @@ def test_stats_bad_range(client):
     tok = _register(client, "trend2").json()["token"]
     h = _auth(tok)
     assert client.get("/api/stats?start=2026-01-05&end=2026-01-01", headers=h).status_code == 400
+
+
+def test_friends_flow_and_permissions(client):
+    ta = _register(client, "amy").json()["token"]; ha = _auth(ta)
+    tb = _register(client, "ben").json()["token"]; hb = _auth(tb)
+    tc = _register(client, "cara").json()["token"]; hc = _auth(tc)
+    # amy 加 ben
+    assert client.post("/api/friends/request", headers=ha, json={"username": "ben"}).json()["status"] == "pending"
+    # ben 看到 incoming,接受
+    inc = client.get("/api/friends", headers=hb).json()["incoming"]
+    assert len(inc) == 1
+    fid = inc[0]["friendship_id"]
+    assert client.post(f"/api/friends/{fid}/accept", headers=hb).status_code == 200
+    # 雙方都成為好友
+    fa = client.get("/api/friends", headers=ha).json()["friends"]
+    assert len(fa) == 1 and fa[0]["username"] == "ben"
+    fb = client.get("/api/friends", headers=hb).json()["friends"]
+    amy_uid = fb[0]["user_id"]
+
+    # amy 記一筆 + 開「飲食記錄」分享
+    client.post("/api/entries", headers=ha, json={"name": "便當", "calories": 700, "protein_g": 40, "source": "manual"})
+    client.put("/api/share", headers=ha, json={"share_mascot": True, "share_diet": True, "share_recipes": False})
+    feed = client.get(f"/api/friends/{amy_uid}/feed", headers=hb).json()
+    assert feed["shares"]["share_diet"] is True
+    assert feed["summary"]["consumed"]["calories"] == 700
+    assert any(e["name"] == "便當" for e in feed["entries"])
+
+    # amy 改成只分享熊狀態 → ben 看不到數字/明細,只有 mascot
+    client.put("/api/share", headers=ha, json={"share_mascot": True, "share_diet": False, "share_recipes": False})
+    feed2 = client.get(f"/api/friends/{amy_uid}/feed", headers=hb).json()
+    assert "entries" not in feed2 and "summary" not in feed2
+    assert feed2["mascot"]["state"] in ("blue", "green", "amber", "red")
+
+    # cara 不是好友 → 看不到
+    assert client.get(f"/api/friends/{amy_uid}/feed", headers=hc).status_code == 403
 
 
 def test_timezone_param(client):

@@ -72,6 +72,10 @@ const ICONS = {
   target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-4.5-4.5L5 21"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.5"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.5a4 4 0 0 1 0 7"/>',
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>',
 };
 function ico(name, cls = "") {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -1038,11 +1042,13 @@ function showView(name) {
   $("view-home").hidden = name !== "home";
   $("view-recipes").hidden = name !== "recipes";
   $("view-stats").hidden = name !== "stats";
+  $("view-friends").hidden = name !== "friends";
   document
     .querySelectorAll(".tabbar-btn")
     .forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   if (name === "recipes") loadRecipes();
   if (name === "stats") loadStats();
+  if (name === "friends") loadFriends();
 }
 
 // ========================================================================
@@ -1204,7 +1210,7 @@ function ytId(url) {
   return m ? m[1] : null;
 }
 
-function openRecipeDetail(r) {
+function openRecipeDetail(r, readonly = false) {
   const ing = splitLines(r.ingredients);
   const steps = splitLines(r.steps);
   const chips = [];
@@ -1225,16 +1231,17 @@ function openRecipeDetail(r) {
        ${videoHtml}
        ${ing.length ? `<h3 class="rd-h">食材</h3><ul class="rd-ing">${ing.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>` : ""}
        ${steps.length ? `<h3 class="rd-h">步驟</h3><ol class="rd-steps">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>` : ""}
-       <div class="rd-actions">
+       ${readonly ? "" : `<div class="rd-actions">
          ${r.calories != null ? `<button class="btn-primary" id="rd-log">記一份到今天</button>` : ""}
          <div class="rd-row">
            <button class="ghost-btn" id="rd-edit">編輯</button>
            <button class="btn-danger" id="rd-del">刪除</button>
          </div>
-       </div>
+       </div>`}
      </div>`
   );
   $("modal-body").querySelector(".rd-title").textContent = r.name;
+  if (readonly) return; // Friend's recipe — view only, no edit/delete/log.
   const logBtn = $("rd-log");
   if (logBtn) logBtn.addEventListener("click", () => logRecipe(r));
   $("rd-edit").addEventListener("click", () => openRecipeForm(r));
@@ -1354,6 +1361,203 @@ function openRecipeForm(r) {
 }
 
 // ========================================================================
+// Friends + sharing
+// ========================================================================
+const MASCOT_FILL = { blue: "#F4A06A", green: "#E8732E", amber: "#E8B04B", red: "#D8503A" };
+
+// Standalone mini mascot (for viewing a friend's "bear state"): state + fill level only.
+function mascotSVG(state, fraction) {
+  const fill = MASCOT_FILL[state] || MASCOT_FILL.blue;
+  const stuffed = state === "red";
+  const mouth = stuffed ? "M84,136 q8,9 16,0 q8,-9 16,0" : "M86,134 Q100,144 114,134";
+  return `<svg class="mini-mascot" viewBox="0 0 200 215" aria-hidden="true">
+    <defs><clipPath id="miniClip"><circle cx="100" cy="120" r="72"/></clipPath></defs>
+    <circle cx="100" cy="120" r="72" fill="#fff" stroke="rgba(46,38,32,.14)" stroke-width="1.5"/>
+    <g clip-path="url(#miniClip)"><path d="${liquidPath(fraction)}" fill="${fill}" opacity="0.95"/></g>
+    <circle cx="80" cy="108" r="6" fill="#2E2620"/><circle cx="120" cy="108" r="6" fill="#2E2620"/>
+    <path d="${mouth}" fill="none" stroke="#2E2620" stroke-width="4" stroke-linecap="round"/>
+  </svg>`;
+}
+
+async function loadFriends() {
+  const body = $("friends-body");
+  body.innerHTML = `<div class="analyzing"><div class="spinner"></div></div>`;
+  try {
+    const d = await api("/api/friends");
+    let html = "";
+
+    if (d.incoming.length) {
+      html += `<h3 class="rd-h">好友邀請</h3>`;
+      for (const r of d.incoming) {
+        html += `<div class="friend-row" data-fid="${r.friendship_id}">
+          <span class="friend-name">${escapeHtml(r.username)}</span>
+          <span class="friend-actions">
+            <button class="mini-btn ok" data-act="accept">${ico("check")}</button>
+            <button class="mini-btn" data-act="reject">${ico("x")}</button>
+          </span></div>`;
+      }
+    }
+
+    html += `<h3 class="rd-h">我的好友</h3>`;
+    if (!d.friends.length) {
+      html += `<p class="items-hint">還沒有好友,上面輸入對方帳號送出邀請吧。</p>`;
+    } else {
+      for (const f of d.friends) {
+        const tags = [];
+        if (f.shares.share_diet) tags.push("飲食");
+        else if (f.shares.share_mascot) tags.push("熊狀態");
+        if (f.shares.share_recipes) tags.push("食譜");
+        html += `<div class="friend-row tappable" data-uid="${f.user_id}" data-name="${escapeAttr(f.username)}">
+          <span class="friend-name">${escapeHtml(f.username)}</span>
+          <span class="friend-tags">${tags.map((t) => `<i>${t}</i>`).join("") || "<i class='muted'>未分享</i>"}</span>
+          <span class="entry-chev">${ico("chevron")}</span></div>`;
+      }
+    }
+
+    if (d.outgoing.length) {
+      html += `<h3 class="rd-h">邀請中</h3>`;
+      for (const r of d.outgoing) {
+        html += `<div class="friend-row" data-fid="${r.friendship_id}">
+          <span class="friend-name">${escapeHtml(r.username)}</span>
+          <span class="friend-tags"><i class="muted">等待接受</i></span>
+          <button class="mini-btn" data-act="cancel">${ico("x")}</button></div>`;
+      }
+    }
+    body.innerHTML = html;
+
+    // Bind row actions
+    body.querySelectorAll(".friend-row").forEach((row) => {
+      const fid = row.dataset.fid;
+      const accept = row.querySelector('[data-act="accept"]');
+      const reject = row.querySelector('[data-act="reject"]');
+      const cancel = row.querySelector('[data-act="cancel"]');
+      if (accept) accept.addEventListener("click", () => friendAction(`/api/friends/${fid}/accept`, "POST"));
+      if (reject) reject.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
+      if (cancel) cancel.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
+      if (row.classList.contains("tappable"))
+        row.addEventListener("click", () => openFriendFeed(row.dataset.uid, row.dataset.name));
+    });
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function friendAction(path, method) {
+  try {
+    await api(path, { method });
+    loadFriends();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function openFriendFeed(uid, name) {
+  openModal(name, `<div class="analyzing"><div class="spinner"></div></div>`);
+  try {
+    const f = await api(tzq(`/api/friends/${uid}/feed`) + dateParam());
+    let html = "";
+    if (f.mascot) {
+      html += `<div class="friend-mascot">${mascotSVG(f.mascot.state, f.mascot.fraction)}
+        <p class="items-hint" style="text-align:center">${escapeHtml(name)} 今天的熊</p></div>`;
+    }
+    if (f.summary) {
+      const s = f.summary;
+      html += `<div class="fav-item" style="margin-bottom:12px"><div class="fav-info">
+        <div class="fav-name">今天攝取</div>
+        <div class="fav-macro">${s.consumed.calories} kcal · ${s.consumed.protein_g}g 蛋白${s.targets ? ` · 目標 ${s.targets.calories_min}–${s.targets.calories_max}` : ""}</div>
+      </div></div>`;
+      if (f.entries && f.entries.length) {
+        html += `<ul class="entry-list">` + f.entries.map((e) =>
+          `<li class="entry"><span class="entry-badge">${ico(SOURCE_ICON[e.source] || "pencil")}</span>
+            <div class="entry-main"><div class="entry-name">${escapeHtml(e.name)}</div></div>
+            <div class="entry-macro"><div class="entry-cal">${e.calories}</div><div class="entry-pro">${e.protein_g}g</div></div></li>`
+        ).join("") + `</ul>`;
+      } else {
+        html += `<p class="items-hint">今天還沒有記錄。</p>`;
+      }
+    }
+    if (f.recipes) {
+      html += `<h3 class="rd-h">食譜</h3>`;
+      if (!f.recipes.length) html += `<p class="items-hint">還沒有食譜。</p>`;
+      html += `<div class="recipe-list" id="friend-recipes"></div>`;
+    }
+    if (!f.mascot && !f.summary && !f.recipes) {
+      html += `<p class="items-hint">這位好友目前沒有分享任何內容。</p>`;
+    }
+    $("modal-body").innerHTML = html;
+
+    if (f.recipes && f.recipes.length) {
+      const wrap = $("friend-recipes");
+      f.recipes.forEach((r) => {
+        const card = document.createElement("div");
+        card.className = "recipe-card";
+        const meta = [];
+        if (r.calories != null) meta.push(`${r.calories} kcal/份`);
+        if (r.protein_g != null) meta.push(`${r.protein_g}g 蛋白`);
+        card.innerHTML = `<div class="recipe-card-main"><div class="recipe-name">${escapeHtml(r.name)}</div>
+          <div class="recipe-meta">${meta.map((m) => `<span>${m}</span>`).join("")}</div></div>
+          <span class="entry-chev">${ico("chevron")}</span>`;
+        card.addEventListener("click", () => openRecipeDetail(r, true)); // read-only
+        wrap.appendChild(card);
+      });
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function addFriend() {
+  const username = $("ff-username").value.trim();
+  if (!username) {
+    toast("請輸入帳號", true);
+    return;
+  }
+  try {
+    const r = await api("/api/friends/request", { method: "POST", body: { username } });
+    $("ff-username").value = "";
+    toast(r.status === "accepted" ? "已成為好友" : "邀請已送出");
+    loadFriends();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function openShareSettings() {
+  openModal("分享設定", `<div class="analyzing"><div class="spinner"></div></div>`);
+  let p = { share_mascot: true, share_diet: false, share_recipes: false };
+  try {
+    p = await api("/api/share");
+  } catch (_) {}
+  const row = (id, label, desc, on) =>
+    `<label class="switch-row">
+       <span><b>${label}</b><small>${desc}</small></span>
+       <input type="checkbox" id="${id}" ${on ? "checked" : ""} />
+     </label>`;
+  $("modal-body").innerHTML =
+    `<p class="items-hint">選擇好友可以看到你的哪些東西(套用到所有好友)。</p>` +
+    row("sh-mascot", "今天的熊狀態", "只看得到你的吉祥物(綠/紅),看不到數字", p.share_mascot) +
+    row("sh-diet", "飲食記錄", "當日攝取數字與每一筆記錄", p.share_diet) +
+    row("sh-recipes", "食譜", "你建立的所有食譜", p.share_recipes) +
+    `<button class="btn-primary" id="sh-save">儲存</button>`;
+  $("sh-save").addEventListener("click", async () => {
+    try {
+      await api("/api/share", {
+        method: "PUT",
+        body: {
+          share_mascot: $("sh-mascot").checked,
+          share_diet: $("sh-diet").checked,
+          share_recipes: $("sh-recipes").checked,
+        },
+      });
+      closeModal();
+      toast("已更新分享設定");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// ========================================================================
 // Utils
 // ========================================================================
 let toastTimer;
@@ -1404,6 +1608,11 @@ function setupApp() {
     if (col && col.dataset.date) goToDate(col.dataset.date);
   });
   $("recipe-add").addEventListener("click", () => openRecipeForm(null));
+  $("ff-add").addEventListener("click", addFriend);
+  $("ff-username").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addFriend();
+  });
+  $("share-settings").addEventListener("click", openShareSettings);
   renderIcons();
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {

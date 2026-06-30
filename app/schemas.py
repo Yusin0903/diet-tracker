@@ -16,6 +16,16 @@ class LoginIn(BaseModel):
     password: str = Field(..., max_length=128)
 
 
+class FriendRequestIn(BaseModel):
+    username: str = Field(..., min_length=1, max_length=50)
+
+
+class SharePrefsIn(BaseModel):
+    share_mascot: bool = True
+    share_diet: bool = False
+    share_recipes: bool = False
+
+
 class EntryIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     calories: int = Field(..., ge=0, le=100_000)

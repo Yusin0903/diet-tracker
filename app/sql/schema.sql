@@ -69,3 +69,23 @@ CREATE TABLE IF NOT EXISTS recipes (
 CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes (user_id, updated_at DESC);
 -- 既有資料庫升級(新欄位)
 ALTER TABLE recipes ADD COLUMN IF NOT EXISTS video_url TEXT;
+
+-- 好友關係(雙向;以 requester/addressee 一筆表示)
+CREATE TABLE IF NOT EXISTS friendships (
+    id            SERIAL PRIMARY KEY,
+    requester_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    addressee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status        TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'accepted'
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (requester_id, addressee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friend_addr ON friendships (addressee_id, status);
+CREATE INDEX IF NOT EXISTS idx_friend_req ON friendships (requester_id, status);
+
+-- 分享權限(每位使用者一組,套用到所有好友)
+CREATE TABLE IF NOT EXISTS share_prefs (
+    user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    share_mascot  BOOLEAN NOT NULL DEFAULT TRUE,   -- 今天的熊狀態(不含數字)
+    share_diet    BOOLEAN NOT NULL DEFAULT FALSE,  -- 飲食記錄與數字
+    share_recipes BOOLEAN NOT NULL DEFAULT FALSE   -- 食譜
+);

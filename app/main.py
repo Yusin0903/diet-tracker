@@ -11,7 +11,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.db import init_pool
-from app.routers import analyze, auth, entries, foods, profile, recipes, stats, summary
+from app.routers import (
+    analyze, auth, entries, foods, friends, profile, recipes, stats, summary,
+)
 from app.settings import settings
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -58,7 +60,7 @@ async def security_headers(request: Request, call_next):
     return resp
 
 
-for module in (auth, analyze, entries, summary, foods, profile, recipes, stats):
+for module in (auth, analyze, entries, summary, foods, profile, recipes, stats, friends):
     app.include_router(module.router)
 
 

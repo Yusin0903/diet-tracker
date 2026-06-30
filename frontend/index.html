@@ -187,11 +187,25 @@
       <div id="stats-cards" class="stats-cards"></div>
     </div>
 
+    <!-- ===== Friends view ===== -->
+    <div id="view-friends" hidden>
+      <div class="list-head">
+        <h2>好友</h2>
+        <button class="pill-btn" id="share-settings"><span data-ico="sliders"></span>分享設定</button>
+      </div>
+      <div class="add-friend">
+        <input id="ff-username" type="text" placeholder="輸入帳號加好友" autocomplete="off" />
+        <button class="pill-btn" id="ff-add">送出</button>
+      </div>
+      <div id="friends-body"></div>
+    </div>
+
     <!-- Bottom tab bar -->
     <nav class="tabbar">
       <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic" data-ico="home"></span>首頁</button>
       <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic" data-ico="chart"></span>趨勢</button>
       <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic" data-ico="book"></span>食譜</button>
+      <button class="tabbar-btn" data-view="friends"><span class="tabbar-ic" data-ico="users"></span>好友</button>
     </nav>
   </div>
 
