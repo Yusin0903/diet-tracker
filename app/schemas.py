@@ -26,6 +26,23 @@ class SharePrefsIn(BaseModel):
     share_recipes: bool = False
 
 
+EX_TYPES = {"running", "strength", "yoga", "cycling", "swimming", "ball", "walking", "stretch", "other"}
+
+
+class ExerciseIn(BaseModel):
+    ex_type: str
+    duration_min: int = Field(..., ge=1, le=600)
+    distance_km: Optional[float] = Field(None, ge=0, le=500)
+    note: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("ex_type")
+    @classmethod
+    def _valid_type(cls, v: str) -> str:
+        if v not in EX_TYPES:
+            raise ValueError("運動類型不合法")
+        return v
+
+
 class EntryIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     calories: int = Field(..., ge=0, le=100_000)

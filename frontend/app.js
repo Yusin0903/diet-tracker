@@ -76,6 +76,7 @@ const ICONS = {
   sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
   x: '<path d="M18 6L6 18M6 6l12 12"/>',
+  dumbbell: '<path d="M2.5 12h3M18.5 12h3M5.5 12h1.6M16.9 12h1.6"/><rect x="7.1" y="9" width="2.4" height="6" rx="1"/><rect x="14.5" y="9" width="2.4" height="6" rx="1"/>',
 };
 function ico(name, cls = "") {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -1043,12 +1044,14 @@ function showView(name) {
   $("view-recipes").hidden = name !== "recipes";
   $("view-stats").hidden = name !== "stats";
   $("view-friends").hidden = name !== "friends";
+  $("view-exercise").hidden = name !== "exercise";
   document
     .querySelectorAll(".tabbar-btn")
     .forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   if (name === "recipes") loadRecipes();
   if (name === "stats") loadStats();
   if (name === "friends") loadFriends();
+  if (name === "exercise") loadExerciseMonth();
 }
 
 // ========================================================================
@@ -1361,6 +1364,220 @@ function openRecipeForm(r) {
 }
 
 // ========================================================================
+// Exercise (calendar check-in)
+// ========================================================================
+const EX_TYPES = [
+  { key: "running", emoji: "🏃", label: "跑步", hasDistance: true },
+  { key: "strength", emoji: "🏋️", label: "重訓", hasDistance: false },
+  { key: "yoga", emoji: "🧘", label: "瑜伽", hasDistance: false },
+  { key: "cycling", emoji: "🚴", label: "單車", hasDistance: true },
+  { key: "swimming", emoji: "🏊", label: "游泳", hasDistance: true },
+  { key: "ball", emoji: "⚽", label: "球類", hasDistance: false },
+  { key: "walking", emoji: "🚶", label: "走路", hasDistance: true },
+  { key: "stretch", emoji: "🤸", label: "伸展", hasDistance: false },
+  { key: "other", emoji: "➕", label: "其他", hasDistance: false },
+];
+const EX_BY_KEY = Object.fromEntries(EX_TYPES.map((t) => [t.key, t]));
+
+const exState = {
+  year: state.viewDate.getFullYear(),
+  month: state.viewDate.getMonth() + 1, // 1–12
+  selected: ymd(startOfToday()),
+  days: [], // this month's "YYYY-MM-DD" strings that have a log
+};
+
+function exIsCurrentRealMonth() {
+  const now = startOfToday();
+  return exState.year === now.getFullYear() && exState.month === now.getMonth() + 1;
+}
+
+async function loadExerciseMonth() {
+  $("ex-month-title").textContent = `${exState.month}月`;
+  $("ex-year-month").textContent = `${exState.year}年${exState.month}月`;
+  $("ex-next-month").disabled = exIsCurrentRealMonth();
+  try {
+    const d = await api(tzq(`/api/exercises/month?year=${exState.year}&month=${exState.month}`));
+    exState.days = d.days;
+    $("ex-streak-num").textContent = d.streak;
+    renderExCalendarGrid();
+    await loadExerciseDay();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function renderExCalendarGrid() {
+  const grid = $("ex-cal-grid");
+  grid.innerHTML = "";
+  const todayStr = ymd(startOfToday());
+  const first = new Date(exState.year, exState.month - 1, 1);
+  const daysInMonth = new Date(exState.year, exState.month, 0).getDate();
+  const offset = first.getDay(); // 0 = Sunday
+  for (let i = 0; i < offset; i++) {
+    const blank = document.createElement("div");
+    blank.className = "ex-day-cell blank";
+    grid.appendChild(blank);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${exState.year}-${String(exState.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const cell = document.createElement("div");
+    cell.className = "ex-day-cell";
+    if (dateStr > todayStr) cell.classList.add("future");
+    if (dateStr === todayStr) cell.classList.add("today");
+    if (dateStr === exState.selected) cell.classList.add("selected");
+    const hasLog = exState.days.includes(dateStr);
+    cell.innerHTML = `<span>${day}</span>${hasLog ? '<span class="ex-dot"></span>' : ""}`;
+    if (dateStr <= todayStr) {
+      cell.addEventListener("click", () => {
+        exState.selected = dateStr;
+        grid.querySelectorAll(".ex-day-cell").forEach((c) => c.classList.remove("selected"));
+        cell.classList.add("selected");
+        loadExerciseDay();
+      });
+    }
+    grid.appendChild(cell);
+  }
+}
+
+function shiftExMonth(delta) {
+  let m = exState.month + delta;
+  let y = exState.year;
+  if (m < 1) { m = 12; y -= 1; }
+  if (m > 12) { m = 1; y += 1; }
+  exState.year = y;
+  exState.month = m;
+  const now = startOfToday();
+  exState.selected = exIsCurrentRealMonth()
+    ? ymd(now)
+    : `${y}-${String(m).padStart(2, "0")}-01`;
+  loadExerciseMonth();
+}
+
+function goToExerciseToday() {
+  const now = startOfToday();
+  exState.year = now.getFullYear();
+  exState.month = now.getMonth() + 1;
+  exState.selected = ymd(now);
+  loadExerciseMonth();
+}
+
+async function loadExerciseDay() {
+  const isToday = exState.selected === ymd(startOfToday());
+  $("ex-day-title").textContent = isToday ? "今天" : exState.selected;
+  $("ex-add").hidden = !isToday;
+  const list = $("ex-day-list");
+  try {
+    const d = await api(tzq("/api/exercises") + `&date=${exState.selected}`);
+    list.innerHTML = "";
+    $("ex-day-empty").hidden = d.items.length > 0;
+    for (const e of d.items) {
+      const t = EX_BY_KEY[e.ex_type] || EX_BY_KEY.other;
+      const li = document.createElement("li");
+      li.className = "entry";
+      const detail = [`${e.duration_min} 分`];
+      if (e.distance_km != null) detail.push(`${e.distance_km} km`);
+      li.innerHTML = `
+        <span class="entry-badge emoji">${t.emoji}</span>
+        <div class="entry-main">
+          <div class="entry-name">${escapeHtml(t.label)}</div>
+          <div class="entry-sub">${detail.join(" · ")}</div>
+        </div>
+        <div class="entry-macro">
+          <div class="entry-cal">-${e.calories}</div>
+        </div>
+        <span class="entry-chev">${ico("chevron")}</span>`;
+      li.addEventListener("click", () => openExerciseDetail(e));
+      list.appendChild(li);
+    }
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function openExerciseDetail(e) {
+  const t = EX_BY_KEY[e.ex_type] || EX_BY_KEY.other;
+  const detail = [`${e.duration_min} 分鐘`];
+  if (e.distance_km != null) detail.push(`${e.distance_km} km`);
+  openModal(
+    t.label,
+    `<div class="fav-item" style="margin-bottom:14px">
+       <div class="fav-info">
+         <div class="fav-name">${escapeHtml(t.label)}</div>
+         <div class="fav-macro">${detail.join(" · ")} · 約 ${e.calories} kcal</div>
+       </div>
+     </div>
+     ${e.note ? `<p class="items-hint">${escapeHtml(e.note)}</p>` : ""}
+     <button class="btn-danger" id="ex-del">刪除這筆記錄</button>`
+  );
+  $("ex-del").addEventListener("click", async () => {
+    try {
+      await api(`/api/exercises/${e.id}`, { method: "DELETE" });
+      closeModal();
+      loadExerciseMonth();
+      toast("已刪除");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+function openExerciseForm() {
+  const typeGrid = EX_TYPES.map(
+    (t) => `<div class="ex-type-btn" data-type="${t.key}">
+      <div class="ex-type-emoji">${t.emoji}</div>
+      <div class="ex-type-label">${t.label}</div>
+    </div>`
+  ).join("");
+  openModal(
+    "記一筆運動",
+    `<div class="ex-type-grid" id="ex-type-grid">${typeGrid}</div>
+     <label class="field"><span>時長(分鐘)</span>
+       <input id="ex-duration" type="number" inputmode="numeric" min="1" placeholder="例如:30" /></label>
+     <label class="field" id="ex-distance-field" hidden><span>距離(km,可選)</span>
+       <input id="ex-distance" type="number" inputmode="decimal" step="0.1" min="0" /></label>
+     <label class="field"><span>備註(可選)</span>
+       <input id="ex-note" type="text" placeholder="" /></label>
+     <button class="btn-primary" id="ex-save">記錄</button>`
+  );
+  let chosen = null;
+  const grid = $("ex-type-grid");
+  grid.querySelectorAll(".ex-type-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      chosen = btn.dataset.type;
+      grid.querySelectorAll(".ex-type-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      $("ex-distance-field").hidden = !EX_BY_KEY[chosen].hasDistance;
+    });
+  });
+  $("ex-save").addEventListener("click", async () => {
+    if (!chosen) {
+      toast("請選擇運動類型", true);
+      return;
+    }
+    const duration = parseInt($("ex-duration").value, 10);
+    if (!duration || duration <= 0) {
+      toast("請輸入時長", true);
+      return;
+    }
+    try {
+      await api(tzq("/api/exercises"), {
+        method: "POST",
+        body: {
+          ex_type: chosen,
+          duration_min: duration,
+          distance_km: floatOrNull($("ex-distance").value),
+          note: $("ex-note").value.trim() || null,
+        },
+      });
+      closeModal();
+      loadExerciseMonth();
+      toast("已記錄 ✓");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// ========================================================================
 // Friends + sharing
 // ========================================================================
 const MASCOT_FILL = { blue: "#F4A06A", green: "#E8732E", amber: "#E8B04B", red: "#D8503A" };
@@ -1613,6 +1830,10 @@ function setupApp() {
     if (e.key === "Enter") addFriend();
   });
   $("share-settings").addEventListener("click", openShareSettings);
+  $("ex-prev-month").addEventListener("click", () => shiftExMonth(-1));
+  $("ex-next-month").addEventListener("click", () => shiftExMonth(1));
+  $("ex-today-month").addEventListener("click", goToExerciseToday);
+  $("ex-add").addEventListener("click", openExerciseForm);
   renderIcons();
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {

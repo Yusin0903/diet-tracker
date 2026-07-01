@@ -28,7 +28,7 @@ def client():
         with db.get_cursor(commit=True) as cur:
             cur.execute(
                 "TRUNCATE users, entries, foods, profiles, recipes, "
-                "friendships, share_prefs RESTART IDENTITY CASCADE"
+                "friendships, share_prefs, exercises RESTART IDENTITY CASCADE"
             )
         yield c
 
@@ -272,3 +272,70 @@ def test_timezone_param(client):
     # 合法時區回傳 YYYY-MM-DD
     d = client.get("/api/summary?tz=America/New_York", headers=h).json()["date"]
     assert len(d) == 10 and d[4] == "-"
+
+
+# ---------- 運動記錄 ----------
+def test_exercise_calories_default_weight(client):
+    # 沒設定個人資料:用預設體重 65kg 估算。7.0 MET * 65kg * 32/60 hr ≈ 243 kcal
+    tok = _register(client, "runner_noprofile").json()["token"]
+    h = _auth(tok)
+    r = client.post("/api/exercises", headers=h, json={
+        "ex_type": "running", "duration_min": 32, "distance_km": 5.2})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["calories"] == 243
+    assert body["ex_type"] == "running"
+    assert body["distance_km"] == 5.2
+
+
+def test_exercise_calories_uses_profile_weight(client):
+    # 有個人資料:用自己的體重估算。5.0 MET * 80kg * 45/60 hr = 300 kcal
+    tok = _register(client, "lifter").json()["token"]
+    h = _auth(tok)
+    client.put("/api/profile", headers=h, json={
+        "mode": "auto", "sex": "male", "age": 30, "height_cm": 178,
+        "weight_kg": 80, "activity_level": "moderate", "goal": "maintain"})
+    r = client.post("/api/exercises", headers=h, json={
+        "ex_type": "strength", "duration_min": 45})
+    assert r.status_code == 200
+    assert r.json()["calories"] == 300
+    assert r.json()["distance_km"] is None
+
+
+def test_exercise_bad_type_rejected(client):
+    tok = _register(client, "badtype").json()["token"]
+    h = _auth(tok)
+    r = client.post("/api/exercises", headers=h, json={
+        "ex_type": "telepathy", "duration_min": 10})
+    assert r.status_code == 422
+
+
+def test_exercise_list_month_and_delete(client):
+    tok = _register(client, "mover").json()["token"]
+    h = _auth(tok)
+    e1 = client.post("/api/exercises", headers=h, json={
+        "ex_type": "yoga", "duration_min": 20}).json()
+    client.post("/api/exercises", headers=h, json={
+        "ex_type": "walking", "duration_min": 30, "distance_km": 2.5})
+
+    import datetime as _dt
+    today = _dt.date.today()
+
+    day = client.get("/api/exercises", headers=h).json()
+    assert day["date"] == today.isoformat()
+    assert len(day["items"]) == 2
+    assert day["total_duration_min"] == 50
+
+    month = client.get(f"/api/exercises/month?year={today.year}&month={today.month}", headers=h).json()
+    assert today.isoformat() in month["days"]
+    assert month["streak"] >= 1
+
+    # 跨使用者隔離
+    tok2 = _register(client, "mover2").json()["token"]
+    assert client.get("/api/exercises", headers=_auth(tok2)).json()["items"] == []
+    assert client.delete(f"/api/exercises/{e1['id']}", headers=_auth(tok2)).status_code == 404
+
+    # 自己刪得掉
+    assert client.delete(f"/api/exercises/{e1['id']}", headers=h).status_code == 200
+    day2 = client.get("/api/exercises", headers=h).json()
+    assert len(day2["items"]) == 1

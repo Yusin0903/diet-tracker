@@ -200,12 +200,42 @@
       <div id="friends-body"></div>
     </div>
 
+    <!-- ===== Exercise view (calendar check-in) ===== -->
+    <div id="view-exercise" hidden>
+      <div class="ex-cal-head">
+        <div>
+          <div class="ex-cal-label">運動 · Move</div>
+          <div class="ex-cal-month"><span id="ex-month-title"></span></div>
+        </div>
+        <div class="ex-streak"><span id="ex-streak-num">0</span> 天連續 🔥</div>
+      </div>
+      <div class="date-bar">
+        <button id="ex-prev-month" class="date-arrow" aria-label="上個月">‹</button>
+        <button id="ex-today-month" class="date-center"><span id="ex-year-month"></span></button>
+        <button id="ex-next-month" class="date-arrow" aria-label="下個月">›</button>
+      </div>
+      <div class="ex-weekday-row">
+        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+      <div id="ex-cal-grid" class="ex-cal-grid"></div>
+
+      <div class="ex-day-panel">
+        <div class="ex-day-head">
+          <h3 id="ex-day-title">今天</h3>
+          <button class="pill-btn" id="ex-add" hidden><span data-ico="plus"></span>記錄</button>
+        </div>
+        <ul id="ex-day-list" class="entry-list"></ul>
+        <p id="ex-day-empty" class="empty-hint" hidden>這天還沒有運動記錄。</p>
+      </div>
+    </div>
+
     <!-- Bottom tab bar -->
     <nav class="tabbar">
       <button class="tabbar-btn active" data-view="home"><span class="tabbar-ic" data-ico="home"></span>首頁</button>
       <button class="tabbar-btn" data-view="stats"><span class="tabbar-ic" data-ico="chart"></span>趨勢</button>
       <button class="tabbar-btn" data-view="recipes"><span class="tabbar-ic" data-ico="book"></span>食譜</button>
       <button class="tabbar-btn" data-view="friends"><span class="tabbar-ic" data-ico="users"></span>好友</button>
+      <button class="tabbar-btn" data-view="exercise"><span class="tabbar-ic" data-ico="dumbbell"></span>運動</button>
     </nav>
   </div>
 

@@ -89,3 +89,17 @@ CREATE TABLE IF NOT EXISTS share_prefs (
     share_diet    BOOLEAN NOT NULL DEFAULT FALSE,  -- 飲食記錄與數字
     share_recipes BOOLEAN NOT NULL DEFAULT FALSE   -- 食譜
 );
+
+-- 運動記錄(月曆打卡)
+CREATE TABLE IF NOT EXISTS exercises (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    logged_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ex_type      TEXT NOT NULL,           -- 'running'|'strength'|'yoga'|'cycling'|'swimming'|'ball'|'walking'|'stretch'|'other'
+    duration_min INTEGER NOT NULL,
+    distance_km  NUMERIC(5,2),            -- 有氧類可選(跑步/單車/走路/游泳/球類)
+    calories     INTEGER NOT NULL,        -- 記錄當下依體重估算(MET),寫入後不回溯
+    note         TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_exercises_user_logged ON exercises (user_id, logged_at);

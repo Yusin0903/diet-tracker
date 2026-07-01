@@ -496,6 +496,40 @@ body {
 .switch-row small { font-size: 12px; color: var(--ink-dim); }
 .switch-row input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 
+/* ---------- Exercise (calendar check-in) ---------- */
+.ex-cal-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.ex-cal-label { font: 500 10px "Zen Kaku Gothic New", var(--sans); letter-spacing: .28em; color: var(--accent); text-transform: uppercase; }
+.ex-cal-month { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--ink); margin-top: 4px; }
+.ex-streak { font-size: 13px; font-weight: 600; color: var(--accent-deep); background: var(--wash); padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
+.ex-weekday-row {
+  display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
+  font-size: 11px; color: var(--ink-faint); margin: 10px 0 2px;
+}
+.ex-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 20px; }
+.ex-day-cell {
+  position: relative; height: 40px; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--ink); border-radius: 50%; cursor: pointer;
+}
+.ex-day-cell.blank { visibility: hidden; cursor: default; }
+.ex-day-cell.future { color: var(--ink-faint); cursor: default; }
+.ex-day-cell .ex-dot { position: absolute; bottom: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-soft); }
+.ex-day-cell.selected:not(.today) { background: var(--wash); color: var(--accent-deep); font-weight: 700; }
+.ex-day-cell.today { background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 4px 12px rgba(232, 115, 46, .38); }
+.ex-day-cell.today .ex-dot { background: #fff; }
+.ex-day-panel { margin-top: 4px; }
+.ex-day-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.ex-day-head h3 { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+.entry-badge.emoji { font-size: 19px; }
+.ex-type-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 18px; }
+.ex-type-btn {
+  background: var(--card-2); border: 1.5px solid var(--line); border-radius: 16px;
+  padding: 14px 6px; text-align: center; cursor: pointer; transition: .12s;
+}
+.ex-type-btn .ex-type-emoji { font-size: 24px; line-height: 1; }
+.ex-type-btn .ex-type-label { font-size: 12px; font-weight: 600; color: var(--ink); margin-top: 6px; }
+.ex-type-btn.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 8px 18px rgba(232, 115, 46, .3); }
+.ex-type-btn.active .ex-type-label { color: #fff; }
+
 .recipe-detail { padding-top: 2px; }
 .rd-title { font-family: var(--serif); font-size: 26px; font-weight: 600; margin-bottom: 14px; line-height: 1.2; }
 .rd-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
