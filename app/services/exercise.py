@@ -14,7 +14,11 @@ from app.services.profile import get_profile
 # 存後端常數,不查外部 API;記錄當下算好存入,體重之後改動不回溯歷史。
 MET = {
     "running": 7.0,   # 慢跑,沒填距離時的預設強度
-    "strength": 5.0,
+    # 重訓的「時長」是整段時間(含組間休息、換器材),不是持續出力的時間,
+    # 不能套「連續高強度」的 MET(那是 circuit training 幾乎不休息的節奏,約 6.0)。
+    # 用 Compendium of Physical Activities / Harvard Health 常引用的「一般重訓、含正常組間休息」
+    # 數值 ≈ 3.5,同一份數據若套 5.0+ 會把 2 小時的重訓算成 800+ kcal,明顯偏高。
+    "strength": 3.5,
     "yoga": 2.5,
     "cycling": 7.0,   # 中等速度,沒填距離時的預設強度
     "swimming": 6.0,

@@ -315,7 +315,7 @@ def test_exercise_calories_walking_and_cycling_use_speed(client):
 
 
 def test_exercise_calories_no_distance_falls_back_to_flat_met(client):
-    # 沒填距離:退回固定 MET(維持原本行為),重訓 5.0 MET * 65kg * 45/60 hr ≈ 244
+    # 沒填距離:退回固定 MET(維持原本行為),跑步 7.0 MET * 65kg * 30/60 hr ≈ 227
     tok = _register(client, "no_distance").json()["token"]
     h = _auth(tok)
     r = client.post("/api/exercises", headers=h, json={
@@ -325,7 +325,9 @@ def test_exercise_calories_no_distance_falls_back_to_flat_met(client):
 
 
 def test_exercise_calories_uses_profile_weight(client):
-    # 有個人資料:用自己的體重估算。5.0 MET * 80kg * 45/60 hr = 300 kcal
+    # 有個人資料:用自己的體重估算。重訓的「時長」含組間休息,
+    # 用「一般重訓、含正常休息」的 3.5 MET(不是連續高強度的 5–6),
+    # 3.5 MET * 80kg * 45/60 hr = 210 kcal
     tok = _register(client, "lifter").json()["token"]
     h = _auth(tok)
     client.put("/api/profile", headers=h, json={
@@ -334,7 +336,7 @@ def test_exercise_calories_uses_profile_weight(client):
     r = client.post("/api/exercises", headers=h, json={
         "ex_type": "strength", "duration_min": 45})
     assert r.status_code == 200
-    assert r.json()["calories"] == 300
+    assert r.json()["calories"] == 210
     assert r.json()["distance_km"] is None
 
 
