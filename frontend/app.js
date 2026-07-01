@@ -1495,6 +1495,10 @@ async function loadExerciseDay() {
 }
 
 function openExerciseDetail(e) {
+  if (e.ex_type === "strength") {
+    openStrengthDetail(e);
+    return;
+  }
   const t = EX_BY_KEY[e.ex_type] || EX_BY_KEY.other;
   const detail = [`${e.duration_min} 分鐘`];
   if (e.distance_km != null) detail.push(`${e.distance_km} km`);
@@ -1509,6 +1513,137 @@ function openExerciseDetail(e) {
      ${e.note ? `<p class="items-hint">${escapeHtml(e.note)}</p>` : ""}
      <button class="btn-danger" id="ex-del">刪除這筆記錄</button>`
   );
+  $("ex-del").addEventListener("click", async () => {
+    try {
+      await api(`/api/exercises/${e.id}`, { method: "DELETE" });
+      closeModal();
+      loadExerciseMonth();
+      toast("已刪除");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// ---------- 重訓明細:動作 + 組數(2a) ----------
+function _mvSetRowHtml(s) {
+  return `<div class="mv-set-row" data-set="${s.id}">
+    <input class="mv-set-input" type="number" inputmode="decimal" step="0.5" min="0" data-field="weight_kg" value="${s.weight_kg ?? ""}" placeholder="—" />
+    <input class="mv-set-input" type="number" inputmode="numeric" min="1" data-field="reps" value="${s.reps}" />
+    <button class="mv-set-del" data-set="${s.id}">${ico("x")}</button>
+  </div>`;
+}
+
+function _mvCardHtml(m) {
+  return `<div class="mv-card" data-mv="${m.id}">
+    <div class="mv-head">
+      <div class="mv-name">${escapeHtml(m.name)}</div>
+      <button class="mini-btn" data-act="del-mv">${ico("x")}</button>
+    </div>
+    <div class="mv-set-head"><span>重量 kg</span><span>次數</span><span></span></div>
+    <div class="mv-sets">${m.sets.map(_mvSetRowHtml).join("")}</div>
+    <button class="mv-add-set" data-mv="${m.id}">＋ 加一組</button>
+  </div>`;
+}
+
+async function openStrengthDetail(e) {
+  openModal("重訓明細", `<div class="analyzing"><div class="spinner"></div></div>`);
+  let movements = [];
+  try {
+    movements = await api(`/api/exercises/${e.id}/movements`);
+  } catch (err) {
+    toast(err.message, true);
+  }
+  renderStrengthBody(e, movements);
+}
+
+function renderStrengthBody(e, movements) {
+  const totalSets = movements.reduce((n, m) => n + m.sets.length, 0);
+  $("modal-body").innerHTML = `
+    <div class="ex-quick-stats">
+      <div class="ex-stat"><div class="ex-stat-num">${e.duration_min}<small>分</small></div><div class="ex-stat-label">時長</div></div>
+      <div class="ex-stat"><div class="ex-stat-num">${movements.length}</div><div class="ex-stat-label">動作</div></div>
+      <div class="ex-stat"><div class="ex-stat-num">${totalSets}</div><div class="ex-stat-label">總組數</div></div>
+      <div class="ex-stat"><div class="ex-stat-num accent">-${e.calories}</div><div class="ex-stat-label">kcal</div></div>
+    </div>
+    <div id="mv-list">${movements.map(_mvCardHtml).join("")}</div>
+    <div class="mv-add-row">
+      <input id="mv-new-name" type="text" placeholder="新增動作,例如:槓鈴臥推" autocomplete="off" />
+      <button class="pill-btn" id="mv-new-add">＋</button>
+    </div>
+    <button class="btn-danger" id="ex-del" style="margin-top:16px">刪除這筆記錄</button>`;
+
+  const reload = async () => {
+    const fresh = await api(`/api/exercises/${e.id}/movements`);
+    renderStrengthBody(e, fresh);
+  };
+
+  $("mv-list").querySelectorAll(".mv-card").forEach((card) => {
+    const mid = card.dataset.mv;
+    card.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      try {
+        await api(`/api/exercises/movements/${mid}`, { method: "DELETE" });
+        reload();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    card.querySelector(".mv-add-set").addEventListener("click", async () => {
+      const rows = card.querySelectorAll(".mv-set-row");
+      const last = rows[rows.length - 1];
+      const weight = last ? floatOrNull(last.querySelector('[data-field="weight_kg"]').value) : null;
+      const reps = last ? parseInt(last.querySelector('[data-field="reps"]').value, 10) || 10 : 10;
+      try {
+        await api(`/api/exercises/movements/${mid}/sets`, {
+          method: "POST",
+          body: { weight_kg: weight, reps },
+        });
+        reload();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    card.querySelectorAll(".mv-set-row").forEach((row) => {
+      const sid = row.dataset.set;
+      const save = async () => {
+        try {
+          await api(`/api/exercises/sets/${sid}`, {
+            method: "PUT",
+            body: {
+              weight_kg: floatOrNull(row.querySelector('[data-field="weight_kg"]').value),
+              reps: parseInt(row.querySelector('[data-field="reps"]').value, 10) || 1,
+            },
+          });
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+      row.querySelectorAll(".mv-set-input").forEach((inp) => inp.addEventListener("change", save));
+      row.querySelector(".mv-set-del").addEventListener("click", async () => {
+        try {
+          await api(`/api/exercises/sets/${sid}`, { method: "DELETE" });
+          reload();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+    });
+  });
+
+  $("mv-new-add").addEventListener("click", async () => {
+    const name = $("mv-new-name").value.trim();
+    if (!name) {
+      toast("請輸入動作名稱", true);
+      return;
+    }
+    try {
+      await api(`/api/exercises/${e.id}/movements`, { method: "POST", body: { name } });
+      reload();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
   $("ex-del").addEventListener("click", async () => {
     try {
       await api(`/api/exercises/${e.id}`, { method: "DELETE" });

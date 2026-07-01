@@ -43,6 +43,15 @@ class ExerciseIn(BaseModel):
         return v
 
 
+class MovementIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class SetIn(BaseModel):
+    weight_kg: Optional[float] = Field(None, ge=0, le=1000)
+    reps: int = Field(..., ge=1, le=1000)
+
+
 class EntryIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     calories: int = Field(..., ge=0, le=100_000)

@@ -103,3 +103,24 @@ CREATE TABLE IF NOT EXISTS exercises (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_exercises_user_logged ON exercises (user_id, logged_at);
+
+-- 重訓細節:一筆運動記錄(ex_type='strength')底下的動作與組數。
+-- 熱量不靠組數/次數計算(仍用「重訓 MET × 時長」),這裡只存訓練內容。
+CREATE TABLE IF NOT EXISTS exercise_movements (
+    id          SERIAL PRIMARY KEY,
+    exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ex_movements_exercise ON exercise_movements (exercise_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS exercise_sets (
+    id          SERIAL PRIMARY KEY,
+    movement_id INTEGER NOT NULL REFERENCES exercise_movements(id) ON DELETE CASCADE,
+    set_order   INTEGER NOT NULL DEFAULT 0,
+    weight_kg   NUMERIC(6,1),   -- 可選(徒手動作可不填)
+    reps        INTEGER NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ex_sets_movement ON exercise_sets (movement_id, set_order);
