@@ -77,6 +77,7 @@ const ICONS = {
   check: '<path d="M20 6L9 17l-5-5"/>',
   x: '<path d="M18 6L6 18M6 6l12 12"/>',
   dumbbell: '<path d="M2.5 12h3M18.5 12h3M5.5 12h1.6M16.9 12h1.6"/><rect x="7.1" y="9" width="2.4" height="6" rx="1"/><rect x="14.5" y="9" width="2.4" height="6" rx="1"/>',
+  play: '<path d="M7 5.5v13l11-6.5z" fill="currentColor" stroke="none"/>',
 };
 function ico(name, cls = "") {
   return `<svg class="ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -1474,16 +1475,14 @@ async function loadExerciseDay() {
       const t = EX_BY_KEY[e.ex_type] || EX_BY_KEY.other;
       const li = document.createElement("li");
       li.className = "entry";
-      const detail = [`${e.duration_min} 分`];
+      const detail = [];
       if (e.distance_km != null) detail.push(`${e.distance_km} km`);
+      if (e.note) detail.push(e.note);
       li.innerHTML = `
         <span class="entry-badge emoji">${t.emoji}</span>
         <div class="entry-main">
           <div class="entry-name">${escapeHtml(t.label)}</div>
-          <div class="entry-sub">${detail.join(" · ")}</div>
-        </div>
-        <div class="entry-macro">
-          <div class="entry-cal">-${e.calories}</div>
+          ${detail.length ? `<div class="entry-sub">${escapeHtml(detail.join(" · "))}</div>` : ""}
         </div>
         <span class="entry-chev">${ico("chevron")}</span>`;
       li.addEventListener("click", () => openExerciseDetail(e));
@@ -1500,14 +1499,12 @@ function openExerciseDetail(e) {
     return;
   }
   const t = EX_BY_KEY[e.ex_type] || EX_BY_KEY.other;
-  const detail = [`${e.duration_min} 分鐘`];
-  if (e.distance_km != null) detail.push(`${e.distance_km} km`);
   openModal(
     t.label,
     `<div class="fav-item" style="margin-bottom:14px">
        <div class="fav-info">
          <div class="fav-name">${escapeHtml(t.label)}</div>
-         <div class="fav-macro">${detail.join(" · ")} · 約 ${e.calories} kcal</div>
+         ${e.distance_km != null ? `<div class="fav-macro">${e.distance_km} km</div>` : ""}
        </div>
      </div>
      ${e.note ? `<p class="items-hint">${escapeHtml(e.note)}</p>` : ""}
@@ -1560,11 +1557,10 @@ async function openStrengthDetail(e) {
 function renderStrengthBody(e, movements) {
   const totalSets = movements.reduce((n, m) => n + m.sets.length, 0);
   $("modal-body").innerHTML = `
+    ${e.note ? `<p class="items-hint">${escapeHtml(e.note)}</p>` : ""}
     <div class="ex-quick-stats">
-      <div class="ex-stat"><div class="ex-stat-num">${e.duration_min}<small>分</small></div><div class="ex-stat-label">時長</div></div>
       <div class="ex-stat"><div class="ex-stat-num">${movements.length}</div><div class="ex-stat-label">動作</div></div>
       <div class="ex-stat"><div class="ex-stat-num">${totalSets}</div><div class="ex-stat-label">總組數</div></div>
-      <div class="ex-stat"><div class="ex-stat-num accent">-${e.calories}</div><div class="ex-stat-label">kcal</div></div>
     </div>
     <div id="mv-list">${movements.map(_mvCardHtml).join("")}</div>
     <div class="mv-add-row">
@@ -1666,8 +1662,6 @@ function openExerciseForm() {
   openModal(
     "記一筆運動",
     `<div class="ex-type-grid" id="ex-type-grid">${typeGrid}</div>
-     <label class="field"><span>時長(分鐘)</span>
-       <input id="ex-duration" type="number" inputmode="numeric" min="1" placeholder="例如:30" /></label>
      <label class="field" id="ex-distance-field" hidden><span>距離(km,可選)</span>
        <input id="ex-distance" type="number" inputmode="decimal" step="0.1" min="0" /></label>
      <label class="field"><span>備註(可選)</span>
@@ -1688,17 +1682,11 @@ function openExerciseForm() {
       toast("請選擇運動類型", true);
       return;
     }
-    const duration = parseInt($("ex-duration").value, 10);
-    if (!duration || duration <= 0) {
-      toast("請輸入時長", true);
-      return;
-    }
     try {
       await api(tzq("/api/exercises"), {
         method: "POST",
         body: {
           ex_type: chosen,
-          duration_min: duration,
           distance_km: floatOrNull($("ex-distance").value),
           note: $("ex-note").value.trim() || null,
         },
@@ -1706,6 +1694,189 @@ function openExerciseForm() {
       closeModal();
       loadExerciseMonth();
       toast("已記錄 ✓");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+}
+
+// ---------- 訓練菜單(可套用的重訓範本):列表 / 編輯 / 套用 ----------
+async function openPlansList() {
+  openModal("我的菜單", `<div class="analyzing"><div class="spinner"></div></div>`);
+  await renderPlansList();
+}
+
+async function renderPlansList() {
+  let plans = [];
+  try {
+    plans = await api("/api/workout-plans");
+  } catch (err) {
+    toast(err.message, true);
+  }
+  $("modal-body").innerHTML = `
+    <div class="add-friend">
+      <input id="plan-new-name" type="text" placeholder="新菜單名稱,例如:上肢菜單" autocomplete="off" />
+      <button class="pill-btn" id="plan-new-add">＋</button>
+    </div>
+    ${plans.length
+      ? plans.map((p) => `
+        <div class="friend-row" data-plan="${p.id}">
+          <span class="friend-name">${escapeHtml(p.name)}</span>
+          <span class="friend-tags"><i>${p.movement_count} 個動作</i></span>
+          <span class="friend-actions">
+            <button class="mini-btn ok" data-act="use" title="開始使用">${ico("play")}</button>
+            <button class="mini-btn" data-act="edit" title="編輯">${ico("pencil")}</button>
+            <button class="mini-btn" data-act="del" title="刪除">${ico("x")}</button>
+          </span>
+        </div>`).join("")
+      : `<p class="items-hint">還沒有菜單,先建立一個吧。</p>`}`;
+
+  $("plan-new-add").addEventListener("click", async () => {
+    const name = $("plan-new-name").value.trim();
+    if (!name) {
+      toast("請輸入菜單名稱", true);
+      return;
+    }
+    try {
+      const plan = await api("/api/workout-plans", { method: "POST", body: { name } });
+      openPlanEditor(plan);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  $("modal-body").querySelectorAll(".friend-row").forEach((row) => {
+    const pid = row.dataset.plan;
+    row.querySelector('[data-act="use"]').addEventListener("click", () => startPlanSession(pid));
+    row.querySelector('[data-act="edit"]').addEventListener("click", async () => {
+      try {
+        const plan = await api(`/api/workout-plans/${pid}`);
+        openPlanEditor(plan);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    row.querySelector('[data-act="del"]').addEventListener("click", async () => {
+      try {
+        await api(`/api/workout-plans/${pid}`, { method: "DELETE" });
+        renderPlansList();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  });
+}
+
+async function startPlanSession(planId) {
+  try {
+    const { exercise, movements } = await api(tzq(`/api/exercises/from-plan/${planId}`), { method: "POST" });
+    loadExerciseMonth();
+    openModal("重訓明細", `<div class="analyzing"><div class="spinner"></div></div>`);
+    renderStrengthBody(exercise, movements);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function _planMvRowHtml(m) {
+  return `<div class="plan-mv-row" data-mv="${m.id}">
+    <input class="plan-mv-name" type="text" value="${escapeAttr(m.name)}" />
+    <input class="plan-mv-num" type="number" inputmode="numeric" min="1" data-field="target_sets" value="${m.target_sets}" title="組數" />
+    <input class="plan-mv-num" type="number" inputmode="numeric" min="1" data-field="target_reps" value="${m.target_reps}" title="次數" />
+    <button class="mini-btn" data-act="del-mv">${ico("x")}</button>
+  </div>`;
+}
+
+function openPlanEditor(plan) {
+  openModal(plan.name, "");
+  renderPlanEditorBody(plan);
+}
+
+function renderPlanEditorBody(plan) {
+  const vid = ytId(plan.source_url);
+  const sourceHtml = vid
+    ? `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${vid}" title="菜單影片" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+    : "";
+  $("modal-body").innerHTML = `
+    <label class="field"><span>菜單名稱</span>
+      <input id="plan-name" type="text" value="${escapeAttr(plan.name)}" /></label>
+    <label class="field"><span>出處連結(可選,YouTube 會直接嵌入)</span>
+      <input id="plan-source" type="url" inputmode="url" value="${escapeAttr(plan.source_url || "")}" placeholder="https://youtu.be/... 或部落格連結" /></label>
+    ${sourceHtml}
+    <div class="mv-set-head" style="margin-top:14px"><span>動作</span><span>組數</span><span>次數</span><span></span></div>
+    <div id="plan-mv-list">${plan.movements.map(_planMvRowHtml).join("")}</div>
+    <div class="mv-add-row">
+      <input id="plan-mv-new-name" type="text" placeholder="新增動作,例如:槓鈴臥推" autocomplete="off" />
+      <button class="pill-btn" id="plan-mv-new-add">＋</button>
+    </div>
+    <button class="btn-danger" id="plan-del" style="margin-top:16px">刪除整個菜單</button>`;
+
+  const saveMeta = async () => {
+    try {
+      const updated = await api(`/api/workout-plans/${plan.id}`, {
+        method: "PUT",
+        body: { name: $("plan-name").value.trim() || plan.name, source_url: $("plan-source").value.trim() || null },
+      });
+      plan = updated;
+      renderPlanEditorBody(plan);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+  $("plan-name").addEventListener("change", saveMeta);
+  $("plan-source").addEventListener("change", saveMeta);
+
+  $("plan-mv-list").querySelectorAll(".plan-mv-row").forEach((row) => {
+    const mid = row.dataset.mv;
+    const saveMovement = async () => {
+      try {
+        await api(`/api/workout-plans/movements/${mid}`, {
+          method: "PUT",
+          body: {
+            name: row.querySelector(".plan-mv-name").value.trim(),
+            target_sets: parseInt(row.querySelector('[data-field="target_sets"]').value, 10) || 1,
+            target_reps: parseInt(row.querySelector('[data-field="target_reps"]').value, 10) || 1,
+          },
+        });
+      } catch (err) {
+        toast(err.message, true);
+      }
+    };
+    row.querySelector(".plan-mv-name").addEventListener("change", saveMovement);
+    row.querySelectorAll(".plan-mv-num").forEach((inp) => inp.addEventListener("change", saveMovement));
+    row.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      try {
+        await api(`/api/workout-plans/movements/${mid}`, { method: "DELETE" });
+        const fresh = await api(`/api/workout-plans/${plan.id}`);
+        plan = fresh;
+        renderPlanEditorBody(plan);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  });
+
+  $("plan-mv-new-add").addEventListener("click", async () => {
+    const name = $("plan-mv-new-name").value.trim();
+    if (!name) {
+      toast("請輸入動作名稱", true);
+      return;
+    }
+    try {
+      await api(`/api/workout-plans/${plan.id}/movements`, { method: "POST", body: { name } });
+      const fresh = await api(`/api/workout-plans/${plan.id}`);
+      plan = fresh;
+      renderPlanEditorBody(plan);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  $("plan-del").addEventListener("click", async () => {
+    try {
+      await api(`/api/workout-plans/${plan.id}`, { method: "DELETE" });
+      closeModal();
+      toast("已刪除菜單");
     } catch (err) {
       toast(err.message, true);
     }
@@ -1969,6 +2140,7 @@ function setupApp() {
   $("ex-next-month").addEventListener("click", () => shiftExMonth(1));
   $("ex-today-month").addEventListener("click", goToExerciseToday);
   $("ex-add").addEventListener("click", openExerciseForm);
+  $("ex-plans").addEventListener("click", openPlansList);
   renderIcons();
   $("modal-close").addEventListener("click", closeModal);
   $("modal").addEventListener("click", (e) => {

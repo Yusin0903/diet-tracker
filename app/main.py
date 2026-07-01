@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from app.db import init_pool
 from app.routers import (
     analyze, auth, entries, exercises, foods, friends, profile, recipes, stats, summary,
+    workout_plans,
 )
 from app.settings import settings
 
@@ -60,7 +61,10 @@ async def security_headers(request: Request, call_next):
     return resp
 
 
-for module in (auth, analyze, entries, summary, foods, profile, recipes, stats, friends, exercises):
+for module in (
+    auth, analyze, entries, summary, foods, profile, recipes, stats, friends, exercises,
+    workout_plans,
+):
     app.include_router(module.router)
 
 

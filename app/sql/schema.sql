@@ -90,19 +90,22 @@ CREATE TABLE IF NOT EXISTS share_prefs (
     share_recipes BOOLEAN NOT NULL DEFAULT FALSE   -- 食譜
 );
 
--- 運動記錄(月曆打卡)
+-- 運動記錄(月曆打卡)。先求養成習慣:時長/熱量都不強制,重點是「今天有沒有動」。
 CREATE TABLE IF NOT EXISTS exercises (
     id           SERIAL PRIMARY KEY,
     user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     logged_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     ex_type      TEXT NOT NULL,           -- 'running'|'strength'|'yoga'|'cycling'|'swimming'|'ball'|'walking'|'stretch'|'other'
-    duration_min INTEGER NOT NULL,
+    duration_min INTEGER,                 -- 可選,不強制填
     distance_km  NUMERIC(5,2),            -- 有氧類可選(跑步/單車/走路/游泳/球類)
-    calories     INTEGER NOT NULL,        -- 記錄當下依體重估算(MET),寫入後不回溯
+    calories     INTEGER,                 -- 不再自動估算,保留欄位供舊資料/未來使用
     note         TEXT,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_exercises_user_logged ON exercises (user_id, logged_at);
+-- 既有資料庫升級:時長/熱量從必填改成可選
+ALTER TABLE exercises ALTER COLUMN duration_min DROP NOT NULL;
+ALTER TABLE exercises ALTER COLUMN calories DROP NOT NULL;
 
 -- 重訓細節:一筆運動記錄(ex_type='strength')底下的動作與組數。
 -- 熱量不靠組數/次數計算(仍用「重訓 MET × 時長」),這裡只存訓練內容。
@@ -124,3 +127,25 @@ CREATE TABLE IF NOT EXISTS exercise_sets (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_ex_sets_movement ON exercise_sets (movement_id, set_order);
+
+-- 訓練菜單:可重複套用的重訓範本。使用時直接把動作/組數/次數複製成當天的實際記錄,
+-- 使用者當下只要調整每組的重量(配重)。
+CREATE TABLE IF NOT EXISTS workout_plans (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    source_url TEXT,                   -- 出處(YouTube 影片或部落格連結,可選)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_workout_plans_user ON workout_plans (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS workout_plan_movements (
+    id          SERIAL PRIMARY KEY,
+    plan_id     INTEGER NOT NULL REFERENCES workout_plans(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    target_sets INTEGER NOT NULL DEFAULT 3,
+    target_reps INTEGER NOT NULL DEFAULT 10,
+    sort_order  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_plan_movements_plan ON workout_plan_movements (plan_id, sort_order);

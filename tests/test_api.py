@@ -28,7 +28,7 @@ def client():
         with db.get_cursor(commit=True) as cur:
             cur.execute(
                 "TRUNCATE users, entries, foods, profiles, recipes, "
-                "friendships, share_prefs, exercises RESTART IDENTITY CASCADE"
+                "friendships, share_prefs, exercises, workout_plans RESTART IDENTITY CASCADE"
             )
         yield c
 
@@ -274,87 +274,42 @@ def test_timezone_param(client):
     assert len(d) == 10 and d[4] == "-"
 
 
-# ---------- 運動記錄 ----------
-def test_exercise_calories_default_weight(client):
-    # 沒設定個人資料:用預設體重 65kg。9.75km/h 的配速(5.2km/32min)算跑步 ACSM 公式,
-    # MET = (0.2*162.5+3.5)/3.5 ≈ 10.286,kcal = 10.286*65*32/60 ≈ 357
-    tok = _register(client, "runner_noprofile").json()["token"]
+# ---------- 運動記錄(先求養成紀錄習慣:不強制時長,不算熱量) ----------
+def test_exercise_log_minimal(client):
+    tok = _register(client, "minimal_logger").json()["token"]
     h = _auth(tok)
-    r = client.post("/api/exercises", headers=h, json={
-        "ex_type": "running", "duration_min": 32, "distance_km": 5.2})
+    r = client.post("/api/exercises", headers=h, json={"ex_type": "yoga"})
     assert r.status_code == 200
     body = r.json()
-    assert body["calories"] == 357
-    assert body["ex_type"] == "running"
+    assert body["ex_type"] == "yoga"
+    assert "duration_min" not in body and "calories" not in body
+    assert body["distance_km"] is None
+    assert body["note"] is None
+
+
+def test_exercise_with_distance_and_note(client):
+    tok = _register(client, "runner_note").json()["token"]
+    h = _auth(tok)
+    r = client.post("/api/exercises", headers=h, json={
+        "ex_type": "running", "distance_km": 5.2, "note": "公園慢跑"})
+    assert r.status_code == 200
+    body = r.json()
     assert body["distance_km"] == 5.2
-
-
-def test_exercise_calories_slow_pace_uses_walking_formula(client):
-    # 20 分鐘跑(選)1 公里 = 時速僅 3km/h,遠低於「跑步」門檻(6.4km/h),
-    # 應該退回走路公式估算,而不是死套跑步的高 MET(用戶回報這樣算出 198 kcal 明顯過高)。
-    # MET = (0.1*50+3.5)/3.5 ≈ 2.4286,kcal = 2.4286*65*20/60 ≈ 53(預設體重 65kg)
-    tok = _register(client, "slow_jogger").json()["token"]
-    h = _auth(tok)
-    r = client.post("/api/exercises", headers=h, json={
-        "ex_type": "running", "duration_min": 20, "distance_km": 1})
-    assert r.status_code == 200
-    assert r.json()["calories"] == 53
-
-
-def test_exercise_calories_walking_and_cycling_use_speed(client):
-    tok = _register(client, "speedy").json()["token"]
-    h = _auth(tok)
-    # 走路 2km/30min = 4km/h → MET=(0.1*66.667+3.5)/3.5≈2.905,kcal≈65*2.905*0.5≈94
-    w = client.post("/api/exercises", headers=h, json={
-        "ex_type": "walking", "duration_min": 30, "distance_km": 2}).json()
-    assert w["calories"] == 94
-    # 單車 20km/60min = 20km/h → 落在 19–22.4km/h 區間,MET=8.0,kcal=65*8*1=520
-    c = client.post("/api/exercises", headers=h, json={
-        "ex_type": "cycling", "duration_min": 60, "distance_km": 20}).json()
-    assert c["calories"] == 520
-
-
-def test_exercise_calories_no_distance_falls_back_to_flat_met(client):
-    # 沒填距離:退回固定 MET(維持原本行為),跑步 7.0 MET * 65kg * 30/60 hr ≈ 227
-    tok = _register(client, "no_distance").json()["token"]
-    h = _auth(tok)
-    r = client.post("/api/exercises", headers=h, json={
-        "ex_type": "running", "duration_min": 30})
-    assert r.status_code == 200
-    assert r.json()["calories"] == round(7.0 * 65 * 0.5)
-
-
-def test_exercise_calories_uses_profile_weight(client):
-    # 有個人資料:用自己的體重估算。重訓的「時長」含組間休息,
-    # 用「一般重訓、含正常休息」的 3.5 MET(不是連續高強度的 5–6),
-    # 3.5 MET * 80kg * 45/60 hr = 210 kcal
-    tok = _register(client, "lifter").json()["token"]
-    h = _auth(tok)
-    client.put("/api/profile", headers=h, json={
-        "mode": "auto", "sex": "male", "age": 30, "height_cm": 178,
-        "weight_kg": 80, "activity_level": "moderate", "goal": "maintain"})
-    r = client.post("/api/exercises", headers=h, json={
-        "ex_type": "strength", "duration_min": 45})
-    assert r.status_code == 200
-    assert r.json()["calories"] == 210
-    assert r.json()["distance_km"] is None
+    assert body["note"] == "公園慢跑"
 
 
 def test_exercise_bad_type_rejected(client):
     tok = _register(client, "badtype").json()["token"]
     h = _auth(tok)
-    r = client.post("/api/exercises", headers=h, json={
-        "ex_type": "telepathy", "duration_min": 10})
+    r = client.post("/api/exercises", headers=h, json={"ex_type": "telepathy"})
     assert r.status_code == 422
 
 
 def test_exercise_list_month_and_delete(client):
     tok = _register(client, "mover").json()["token"]
     h = _auth(tok)
-    e1 = client.post("/api/exercises", headers=h, json={
-        "ex_type": "yoga", "duration_min": 20}).json()
-    client.post("/api/exercises", headers=h, json={
-        "ex_type": "walking", "duration_min": 30, "distance_km": 2.5})
+    e1 = client.post("/api/exercises", headers=h, json={"ex_type": "yoga"}).json()
+    client.post("/api/exercises", headers=h, json={"ex_type": "walking", "distance_km": 2.5})
 
     import datetime as _dt
     today = _dt.date.today()
@@ -362,7 +317,6 @@ def test_exercise_list_month_and_delete(client):
     day = client.get("/api/exercises", headers=h).json()
     assert day["date"] == today.isoformat()
     assert len(day["items"]) == 2
-    assert day["total_duration_min"] == 50
 
     month = client.get(f"/api/exercises/month?year={today.year}&month={today.month}", headers=h).json()
     assert today.isoformat() in month["days"]
@@ -382,8 +336,7 @@ def test_exercise_list_month_and_delete(client):
 def test_strength_movements_and_sets(client):
     tok = _register(client, "gymrat").json()["token"]
     h = _auth(tok)
-    ex = client.post("/api/exercises", headers=h, json={
-        "ex_type": "strength", "duration_min": 45}).json()
+    ex = client.post("/api/exercises", headers=h, json={"ex_type": "strength"}).json()
     eid = ex["id"]
 
     assert client.get(f"/api/exercises/{eid}/movements", headers=h).json() == []
@@ -406,9 +359,6 @@ def test_strength_movements_and_sets(client):
         "weight_kg": 42.5, "reps": 11})
     assert upd.status_code == 200 and upd.json()["weight_kg"] == 42.5
 
-    # 熱量不受組數/次數影響,仍是建立時依時長算好的值
-    assert client.get(f"/api/exercises", headers=h).json()["items"][0]["calories"] == ex["calories"]
-
     # 刪一組
     assert client.delete(f"/api/exercises/sets/{s1['id']}", headers=h).status_code == 200
     assert len(client.get(f"/api/exercises/{eid}/movements", headers=h).json()[0]["sets"]) == 1
@@ -430,3 +380,88 @@ def test_strength_movements_and_sets(client):
     assert client.put(f"/api/exercises/sets/{s2['id']}", headers=h2, json={"reps": 5}).status_code == 404
     assert client.delete(f"/api/exercises/sets/{s2['id']}", headers=h2).status_code == 404
     assert client.delete(f"/api/exercises/movements/{mv2['id']}", headers=h2).status_code == 404
+
+
+# ---------- 訓練菜單(可套用的重訓範本) ----------
+def test_workout_plan_crud_and_isolation(client):
+    tok = _register(client, "planner").json()["token"]
+    h = _auth(tok)
+    assert client.get("/api/workout-plans", headers=h).json() == []
+
+    plan = client.post("/api/workout-plans", headers=h, json={
+        "name": "上肢菜單", "source_url": "https://youtu.be/abcdefghijk"}).json()
+    assert plan["name"] == "上肢菜單" and plan["movements"] == []
+    pid = plan["id"]
+
+    mv = client.post(f"/api/workout-plans/{pid}/movements", headers=h, json={
+        "name": "槓鈴臥推", "target_sets": 4, "target_reps": 8}).json()
+    assert mv == {"id": mv["id"], "name": "槓鈴臥推", "target_sets": 4, "target_reps": 8}
+
+    lst = client.get("/api/workout-plans", headers=h).json()
+    assert len(lst) == 1 and lst[0]["movement_count"] == 1
+
+    detail = client.get(f"/api/workout-plans/{pid}", headers=h).json()
+    assert detail["source_url"] == "https://youtu.be/abcdefghijk"
+    assert len(detail["movements"]) == 1
+
+    upd = client.put(f"/api/workout-plans/movements/{mv['id']}", headers=h, json={
+        "name": "槓鈴臥推", "target_sets": 5, "target_reps": 6})
+    assert upd.status_code == 200 and upd.json()["target_sets"] == 5
+
+    rename = client.put(f"/api/workout-plans/{pid}", headers=h, json={"name": "上肢菜單 A"})
+    assert rename.status_code == 200 and rename.json()["name"] == "上肢菜單 A"
+
+    # 無效出處連結被拒絕
+    bad = client.post("/api/workout-plans", headers=h, json={
+        "name": "壞連結", "source_url": "javascript:alert(1)"})
+    assert bad.status_code == 422
+
+    # 跨使用者隔離
+    tok2 = _register(client, "planner2").json()["token"]
+    h2 = _auth(tok2)
+    assert client.get(f"/api/workout-plans/{pid}", headers=h2).status_code == 404
+    assert client.put(f"/api/workout-plans/{pid}", headers=h2, json={"name": "x"}).status_code == 404
+    assert client.post(f"/api/workout-plans/{pid}/movements", headers=h2, json={
+        "name": "x"}).status_code == 404
+    assert client.put(f"/api/workout-plans/movements/{mv['id']}", headers=h2, json={
+        "name": "x"}).status_code == 404
+    assert client.delete(f"/api/workout-plans/movements/{mv['id']}", headers=h2).status_code == 404
+    assert client.delete(f"/api/workout-plans/{pid}", headers=h2).status_code == 404
+
+    assert client.delete(f"/api/workout-plans/movements/{mv['id']}", headers=h).status_code == 200
+    assert client.delete(f"/api/workout-plans/{pid}", headers=h).status_code == 200
+    assert client.get("/api/workout-plans", headers=h).json() == []
+
+
+def test_exercise_from_plan_copies_movements_and_sets(client):
+    tok = _register(client, "planuser").json()["token"]
+    h = _auth(tok)
+    plan = client.post("/api/workout-plans", headers=h, json={"name": "腿部菜單"}).json()
+    pid = plan["id"]
+    client.post(f"/api/workout-plans/{pid}/movements", headers=h, json={
+        "name": "深蹲", "target_sets": 3, "target_reps": 8})
+    client.post(f"/api/workout-plans/{pid}/movements", headers=h, json={
+        "name": "腿推機", "target_sets": 4, "target_reps": 12})
+
+    r = client.post(f"/api/exercises/from-plan/{pid}", headers=h)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["exercise"]["ex_type"] == "strength"
+    assert "腿部菜單" in body["exercise"]["note"]
+    movements = body["movements"]
+    assert len(movements) == 2
+    assert len(movements[0]["sets"]) == 3
+    assert len(movements[1]["sets"]) == 4
+    # 重量留空給使用者調整,次數照菜單目標帶入
+    assert all(s["weight_kg"] is None for s in movements[0]["sets"])
+    assert all(s["reps"] == 8 for s in movements[0]["sets"])
+    assert all(s["reps"] == 12 for s in movements[1]["sets"])
+
+    # 這個運動記錄真的存在(可從當日清單查到)
+    eid = body["exercise"]["id"]
+    day = client.get("/api/exercises", headers=h).json()
+    assert any(i["id"] == eid for i in day["items"])
+
+    # 跨使用者隔離:別人的菜單匯不了
+    tok2 = _register(client, "planuser2").json()["token"]
+    assert client.post(f"/api/exercises/from-plan/{pid}", headers=_auth(tok2)).status_code == 404

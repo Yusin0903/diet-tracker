@@ -31,7 +31,6 @@ EX_TYPES = {"running", "strength", "yoga", "cycling", "swimming", "ball", "walki
 
 class ExerciseIn(BaseModel):
     ex_type: str
-    duration_min: int = Field(..., ge=1, le=600)
     distance_km: Optional[float] = Field(None, ge=0, le=500)
     note: Optional[str] = Field(None, max_length=500)
 
@@ -50,6 +49,24 @@ class MovementIn(BaseModel):
 class SetIn(BaseModel):
     weight_kg: Optional[float] = Field(None, ge=0, le=1000)
     reps: int = Field(..., ge=1, le=1000)
+
+
+class PlanIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    source_url: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("source_url")
+    @classmethod
+    def _http_only(cls, v: Optional[str]) -> Optional[str]:
+        if v and v.strip() and not re.match(r"^https?://", v.strip(), re.IGNORECASE):
+            raise ValueError("出處連結需為 http(s) 開頭")
+        return v
+
+
+class PlanMovementIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    target_sets: int = Field(3, ge=1, le=20)
+    target_reps: int = Field(10, ge=1, le=100)
 
 
 class EntryIn(BaseModel):

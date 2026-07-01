@@ -1,4 +1,7 @@
-"""運動記錄:新增 / 查當日 / 查整月打卡狀態 / 刪除,以及重訓的動作與組數細節。"""
+"""運動記錄:新增 / 查當日 / 查整月打卡狀態 / 刪除,重訓的動作與組數細節,以及套用訓練菜單。
+
+先求養成紀錄習慣:時長與熱量都不強制、不自動估算,只在乎「今天有沒有動」。
+"""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +10,7 @@ from app.db import get_cursor
 from app.deps import day_bounds, resolve_tz
 from app.schemas import ExerciseIn, MovementIn, SetIn
 from app.security import current_user
-from app.services.exercise import compute_streak, estimate_calories, month_marks
+from app.services.exercise import compute_streak, month_marks
 
 router = APIRouter(prefix="/api/exercises", tags=["exercises"])
 
@@ -17,9 +20,7 @@ def _serialize(r: dict, tz) -> dict:
         "id": r["id"],
         "logged_at": r["logged_at"].astimezone(tz).isoformat(),
         "ex_type": r["ex_type"],
-        "duration_min": r["duration_min"],
         "distance_km": float(r["distance_km"]) if r["distance_km"] is not None else None,
-        "calories": r["calories"],
         "note": r["note"],
     }
 
@@ -29,15 +30,14 @@ def create_exercise(
     body: ExerciseIn, tz: Optional[str] = None, user: dict = Depends(current_user)
 ):
     zone = resolve_tz(tz)
-    kcal = estimate_calories(user["id"], body.ex_type, body.duration_min, body.distance_km)
     with get_cursor(commit=True) as cur:
         cur.execute(
             """
-            INSERT INTO exercises (user_id, ex_type, duration_min, distance_km, calories, note)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id, logged_at, ex_type, duration_min, distance_km, calories, note
+            INSERT INTO exercises (user_id, ex_type, distance_km, note)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, logged_at, ex_type, distance_km, note
             """,
-            (user["id"], body.ex_type, body.duration_min, body.distance_km, kcal, body.note),
+            (user["id"], body.ex_type, body.distance_km, body.note),
         )
         row = cur.fetchone()
     return _serialize(row, zone)
@@ -52,7 +52,7 @@ def list_exercises(
     with get_cursor() as cur:
         cur.execute(
             """
-            SELECT id, logged_at, ex_type, duration_min, distance_km, calories, note
+            SELECT id, logged_at, ex_type, distance_km, note
             FROM exercises
             WHERE user_id = %s AND logged_at >= %s AND logged_at < %s
             ORDER BY logged_at DESC
@@ -60,13 +60,7 @@ def list_exercises(
             (user["id"], start, end),
         )
         rows = cur.fetchall()
-    items = [_serialize(r, zone) for r in rows]
-    return {
-        "date": day_str,
-        "items": items,
-        "total_duration_min": sum(i["duration_min"] for i in items),
-        "total_calories": sum(i["calories"] for i in items),
-    }
+    return {"date": day_str, "items": [_serialize(r, zone) for r in rows]}
 
 
 @router.get("/month")
@@ -94,7 +88,7 @@ def delete_exercise(exercise_id: int, user: dict = Depends(current_user)):
     return {"ok": True}
 
 
-# ---------- 重訓明細:動作 + 組數(熱量仍用「重訓 MET × 時長」,這裡只存訓練內容) ----------
+# ---------- 重訓明細:動作 + 組數(純訓練內容,不影響/不需要熱量) ----------
 def _serialize_set(s: dict) -> dict:
     return {
         "id": s["id"],
@@ -110,9 +104,7 @@ def _require_owned_exercise(exercise_id: int, user_id: int) -> None:
             raise HTTPException(status_code=404, detail="找不到這筆運動記錄")
 
 
-@router.get("/{exercise_id}/movements")
-def list_movements(exercise_id: int, user: dict = Depends(current_user)):
-    _require_owned_exercise(exercise_id, user["id"])
+def _fetch_movements(exercise_id: int) -> list:
     with get_cursor() as cur:
         cur.execute(
             "SELECT id, name FROM exercise_movements WHERE exercise_id = %s ORDER BY sort_order, id",
@@ -130,6 +122,57 @@ def list_movements(exercise_id: int, user: dict = Depends(current_user)):
                 "sets": [_serialize_set(s) for s in cur.fetchall()],
             })
     return result
+
+
+@router.get("/{exercise_id}/movements")
+def list_movements(exercise_id: int, user: dict = Depends(current_user)):
+    _require_owned_exercise(exercise_id, user["id"])
+    return _fetch_movements(exercise_id)
+
+
+@router.post("/from-plan/{plan_id}")
+def create_from_plan(
+    plan_id: int, tz: Optional[str] = None, user: dict = Depends(current_user)
+):
+    """依照一份訓練菜單開始今天的紀錄:動作/組數/次數直接複製過來,重量留空給使用者調整。"""
+    zone = resolve_tz(tz)
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id, name FROM workout_plans WHERE id = %s AND user_id = %s", (plan_id, user["id"])
+        )
+        plan = cur.fetchone()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="找不到這個菜單")
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO exercises (user_id, ex_type, note)
+            VALUES (%s, 'strength', %s)
+            RETURNING id, logged_at, ex_type, distance_km, note
+            """,
+            (user["id"], f"依照《{plan['name']}》菜單"),
+        )
+        ex_row = cur.fetchone()
+        eid = ex_row["id"]
+        cur.execute(
+            """
+            SELECT name, target_sets, target_reps, sort_order FROM workout_plan_movements
+            WHERE plan_id = %s ORDER BY sort_order, id
+            """,
+            (plan_id,),
+        )
+        for pm in cur.fetchall():
+            cur.execute(
+                "INSERT INTO exercise_movements (exercise_id, name, sort_order) VALUES (%s, %s, %s) RETURNING id",
+                (eid, pm["name"], pm["sort_order"]),
+            )
+            mid = cur.fetchone()["id"]
+            for i in range(pm["target_sets"]):
+                cur.execute(
+                    "INSERT INTO exercise_sets (movement_id, set_order, weight_kg, reps) VALUES (%s, %s, NULL, %s)",
+                    (mid, i, pm["target_reps"]),
+                )
+    return {"exercise": _serialize(ex_row, zone), "movements": _fetch_movements(eid)}
 
 
 @router.post("/{exercise_id}/movements")
