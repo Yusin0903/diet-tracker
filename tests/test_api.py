@@ -112,6 +112,25 @@ def test_entries_update_summary(client):
     assert s["consumed"]["protein_g"] == 35.0
 
 
+def test_entry_backdated(client):
+    import datetime as _dt
+    tok = _register(client, "backdater").json()["token"]
+    h = _auth(tok)
+    yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    r = client.post(f"/api/entries?date={yesterday}", headers=h, json={
+        "name": "昨天的晚餐", "calories": 500, "protein_g": 20, "source": "manual"})
+    assert r.status_code == 200
+    assert r.json()["eaten_at"][:10] == yesterday
+    # 補記的那天看得到,今天看不到
+    assert len(client.get(f"/api/entries?date={yesterday}", headers=h).json()) == 1
+    assert client.get("/api/entries", headers=h).json() == []
+    # 未來日期不給記
+    tomorrow = (_dt.date.today() + _dt.timedelta(days=1)).isoformat()
+    bad = client.post(f"/api/entries?date={tomorrow}", headers=h, json={
+        "name": "x", "calories": 1, "protein_g": 0, "source": "manual"})
+    assert bad.status_code == 400
+
+
 # ---------- profile -> TDEE / overflow ----------
 def test_profile_drives_tdee_and_overflow(client):
     tok = _register(client, "tdee").json()["token"]

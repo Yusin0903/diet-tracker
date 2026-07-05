@@ -162,23 +162,21 @@ async function refresh() {
   await Promise.all([loadSummary(), loadEntries()]);
 }
 
-// Update the date bar and toggle the log entry points based on whether it's today.
+// "今天" / "昨天" / "前天" / "M月D日" for whichever day is passed (defaults to the day being viewed).
+function dayLabel(d = state.viewDate) {
+  const diff = Math.round((startOfToday() - d) / 86400000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  if (diff === 2) return "前天";
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 function updateDateBar() {
-  const today = startOfToday();
-  const diff = Math.round((today - state.viewDate) / 86400000);
-  let label;
-  if (diff === 0) label = "今天";
-  else if (diff === 1) label = "昨天";
-  else if (diff === 2) label = "前天";
-  else label = `${state.viewDate.getMonth() + 1}月${state.viewDate.getDate()}日`;
-  $("date-main").textContent = label;
+  $("date-main").textContent = dayLabel();
   const wk = "日一二三四五六"[state.viewDate.getDay()];
   $("date-sub").textContent = ymd(state.viewDate) + " 週" + wk;
   $("date-next").disabled = isViewingToday(); // Can't view the future
-  // Hide the log entry points when viewing history (new logs always go to today)
-  const past = !isViewingToday();
-  $("app-actions").hidden = past;
-  $("camera-input").disabled = past;
+  // Logging works on any past day too (backdating), not just today.
 }
 
 function shiftDate(days) {
@@ -389,11 +387,11 @@ function openEntryEdit(e) {
 }
 
 async function createEntry(payload) {
-  await api(tzq("/api/entries"), { method: "POST", body: payload });
+  // Logs to whichever day is currently being viewed (today by default, or a past day when backdating).
+  await api(tzq("/api/entries") + dateParam(), { method: "POST", body: payload });
   closeModal();
-  state.viewDate = startOfToday(); // New logs go to today, so jump back so the user sees them
   await refresh();
-  toast("已記錄 ✓");
+  toast(`已記錄到${dayLabel()} ✓`);
 }
 
 // ========================================================================
@@ -841,7 +839,7 @@ function logWithServings({ name, perCal, perPro, unit, source }) {
   perCal = perCal || 0;
   perPro = perPro || 0;
   openModal(
-    "記到今天",
+    `記到${dayLabel()}`,
     `<div class="fav-item" style="margin-bottom:14px">
        <div class="fav-info">
          <div class="fav-name"></div>
@@ -851,7 +849,7 @@ function logWithServings({ name, perCal, perPro, unit, source }) {
      <label class="field"><span>份數</span>
        <input id="lw-serv" type="number" inputmode="decimal" step="0.5" min="0" value="1" /></label>
      <div class="total-preview" id="lw-total"></div>
-     <button class="btn-primary" id="lw-go">記到今天</button>`
+     <button class="btn-primary" id="lw-go">記到${dayLabel()}</button>`
   );
   $("modal-body").querySelector(".fav-name").textContent = name;
   const total = $("lw-total");

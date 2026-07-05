@@ -1,4 +1,5 @@
 """飲食記錄:新增 / 查當日 / 刪除。資料皆以登入會員為界,依其時區算當日。"""
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,21 +14,33 @@ router = APIRouter(prefix="/api/entries", tags=["entries"])
 
 @router.post("")
 def create_entry(
-    body: EntryIn, tz: Optional[str] = None, user: dict = Depends(current_user)
+    body: EntryIn,
+    date: Optional[str] = None,
+    tz: Optional[str] = None,
+    user: dict = Depends(current_user),
 ):
     if body.source not in ("photo", "manual", "favorite", "barcode", "recipe"):
         raise HTTPException(status_code=400, detail="source 不合法")
+    zone = resolve_tz(tz)
+    if date:
+        # 補記過去的日子:錨定到那一天,但保留現在的時刻,同一天多筆補記時順序才合理。
+        start, _, _ = day_bounds(date, zone)
+        if start.date() > datetime.now(zone).date():
+            raise HTTPException(status_code=400, detail="不能記錄未來的日期")
+        eaten_at = datetime.combine(start.date(), datetime.now(zone).time(), tzinfo=zone)
+    else:
+        eaten_at = datetime.now(zone)
     with get_cursor(commit=True) as cur:
         cur.execute(
             """
-            INSERT INTO entries (user_id, name, calories, protein_g, source, note)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO entries (user_id, eaten_at, name, calories, protein_g, source, note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id, eaten_at, name, calories, protein_g, source, note
             """,
-            (user["id"], body.name, body.calories, body.protein_g, body.source, body.note),
+            (user["id"], eaten_at, body.name, body.calories, body.protein_g, body.source, body.note),
         )
         row = cur.fetchone()
-    return serialize_entry(row, resolve_tz(tz))
+    return serialize_entry(row, zone)
 
 
 @router.get("")
