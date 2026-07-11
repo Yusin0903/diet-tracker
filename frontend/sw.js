@@ -1,5 +1,5 @@
 // Service worker: caches only static files (the shell); API always hits the network.
-const CACHE = "diet-shell-v28";
+const CACHE = "diet-shell-v29";
 const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
