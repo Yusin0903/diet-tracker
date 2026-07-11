@@ -505,16 +505,55 @@ function pickPhoto(useCamera) {
   input.click();
 }
 
-function handlePhoto(file) {
+// Normalize every photo to JPEG via canvas before upload, regardless of the
+// source container (HEIC from the iOS photo library being the common one) —
+// the vision API's decoder is stricter than Gemini's was and rejects formats
+// like HEIC outright. Also downscales oversized photos (faster upload, stays
+// under the size cap). The browser only needs to be able to *display* the
+// original format (Safari decodes HEIC natively), not the backend.
+function fileToJpegBlob(file, maxDim = 1600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("圖片轉檔失敗"))),
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("這張照片無法讀取,換一張試試"));
+    };
+    img.src = url;
+  });
+}
+
+async function handlePhoto(file) {
   if (!file) return;
   if (_photoUrl) URL.revokeObjectURL(_photoUrl);
-  _photoFile = file;
-  _photoUrl = URL.createObjectURL(file);
+  try {
+    const jpegBlob = await fileToJpegBlob(file);
+    _photoFile = new File([jpegBlob], "photo.jpg", { type: "image/jpeg" });
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  _photoUrl = URL.createObjectURL(_photoFile);
   photoHintStep("");
 }
 
 // Before analysis the user can add an optional text hint (e.g. "youtiao"),
-// sent to Gemini alongside the image to cut the misrecognition rate sharply.
+// sent alongside the image to cut the misrecognition rate sharply.
 function photoHintStep(hint) {
   openModal(
     "辨識食物照片",
@@ -532,7 +571,7 @@ async function runAnalyze() {
   openModal(
     "辨識食物照片",
     `<img class="preview-img" src="${_photoUrl}" alt="預覽" />
-     <div class="analyzing"><div class="spinner"></div>Gemini 辨識中…</div>`
+     <div class="analyzing"><div class="spinner"></div>AI 辨識中…</div>`
   );
   try {
     const form = new FormData();
