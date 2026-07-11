@@ -1,5 +1,5 @@
-"""Gemini image analysis: returns an estimate only, never writes to the DB
-(the user confirms first, then /api/entries persists it)."""
+"""Vision image analysis (NVIDIA NIM): returns an estimate only, never writes
+to the DB (the user confirms first, then /api/entries persists it)."""
 import logging
 from typing import Optional
 
@@ -7,13 +7,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from app.rate_limit import UsageLimiter
 from app.security import current_user
-from app.services.gemini import analyze_food_image
+from app.services.nvidia import analyze_food_image
 from app.settings import settings
 
 router = APIRouter(prefix="/api", tags=["analyze"])
 logger = logging.getLogger("diet.analyze")
 
-# Throttle this expensive (paid) endpoint per user, and cap upload size.
+# Throttle this endpoint per user, and cap upload size.
 _analyze_limiter = UsageLimiter(settings.analyze_max_per_window, settings.analyze_window_s)
 _MAX_BYTES = settings.max_upload_mb * 1024 * 1024
 
@@ -37,6 +37,6 @@ async def analyze(
         result = analyze_food_image(image_bytes, file.content_type or "image/jpeg", hint)
     except Exception:  # noqa: BLE001
         # Log the detail server-side, return a generic message (don't leak internals).
-        logger.exception("Gemini analyze failed")
+        logger.exception("Vision analyze failed")
         raise HTTPException(status_code=502, detail="分析失敗,請改用手動輸入")
     return result

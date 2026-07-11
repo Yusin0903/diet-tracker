@@ -27,9 +27,9 @@ class Settings(BaseSettings):
     database_url: str = ""
     db_max_conn: int = 40  # 需 >= FastAPI 同步端點的執行緒併發數
 
-    # Gemini(只放後端)
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    # NVIDIA NIM vision(build.nvidia.com,OpenAI 相容 API,免費方案;只放後端)
+    nvidia_api_key: str = ""
+    nvidia_model: str = "meta/llama-3.2-11b-vision-instruct"
 
     # 認證
     # 沒有預設值:必須由環境變數提供,否則啟動時直接失敗(見 main.lifespan),
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     # the client itself prepends sits to the left and is ignored.
     trusted_proxy_hops: int = 1
 
-    # Abuse limits for the expensive Gemini /analyze endpoint.
+    # Abuse limits for the /analyze endpoint (calls the vision API).
     max_upload_mb: int = 8            # Reject larger uploads (memory / cost)
     analyze_max_per_window: int = 20  # Per-user calls allowed per window
     analyze_window_s: int = 600       # Window length in seconds
