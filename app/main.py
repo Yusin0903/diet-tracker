@@ -70,7 +70,20 @@ for module in (
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    # no-cache:每次都要跟伺服器確認是不是最新的,不然改版後使用者可能一直
+    # 停在舊版(尤其 PWA 加到主畫面後,瀏覽器的 HTTP 快取比想像中頑固)。
+    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/sw.js")
+def service_worker():
+    # 同上,而且這支檔案本身決定了 PWA 要不要更新 —— 如果它被瀏覽器的 HTTP
+    # 快取擋住、根本沒去問伺服器有沒有新版,sw.js 內建的版本比對機制
+    # (skipWaiting / clients.claim)完全沒有機會執行,使用者就會卡在舊版。
+    return FileResponse(
+        FRONTEND_DIR / "sw.js", media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # PWA 靜態檔(放最後,避免蓋掉 /api 路由)
