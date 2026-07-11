@@ -1,6 +1,6 @@
 """飲控 App 後端入口。
 
-FastAPI + Postgres + Gemini vision,並 serve PWA 靜態檔。
+FastAPI + Postgres + NVIDIA NIM vision,並 serve PWA 靜態檔。
 路由按資源拆成各 APIRouter(app/routers/),這裡組裝起來。
 """
 from contextlib import asynccontextmanager

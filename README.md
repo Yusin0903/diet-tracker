@@ -2,7 +2,7 @@
 
 **English** · [繁體中文](README.zh-TW.md)
 
-A diet-logging tool built around one core value: **log fast + auto-total against your daily goals**. Snap a food photo and let Gemini estimate calories/protein, scan a product barcode (looked up via Open Food Facts), type values in manually, or one-tap a favorite. The home screen shows at a glance "how much you've eaten today / how much room is left."
+A diet-logging tool built around one core value: **log fast + auto-total against your daily goals**. Snap a food photo and let an NVIDIA NIM vision model estimate calories/protein, scan a product barcode (looked up via Open Food Facts), type values in manually, or one-tap a favorite. The home screen shows at a glance "how much you've eaten today / how much room is left."
 
 It has a **member system**: an **invite code** is required to register (no open sign-up), and each member's data is fully isolated.
 
@@ -33,10 +33,10 @@ The home mascot fills toward your TDEE and "overflows" when you go over; the tre
 | Backend | Python + FastAPI |
 | Database | Postgres (`DATABASE_URL`) |
 | Frontend | PWA (add-to-home-screen, camera capture) |
-| AI | Gemini 2.5 Flash (vision, JSON output) |
+| AI | NVIDIA NIM (`meta/llama-3.2-11b-vision-instruct`, free tier, OpenAI-compatible API) |
 | Deploy | Zeabur |
 
-> **`GEMINI_API_KEY` and invite codes live only on the backend, read from env — they never reach the frontend.**
+> **`NVIDIA_API_KEY` and invite codes live only on the backend, read from env — they never reach the frontend.**
 
 ## Project structure
 
@@ -62,7 +62,7 @@ diet-tracker/
 │       ├── users.py          # register / login / invite codes
 │       ├── profile.py        # target read/write
 │       ├── targets.py        # TDEE / calorie / protein estimation
-│       └── gemini.py         # Gemini 2.5 Flash vision
+│       └── nvidia.py         # NVIDIA NIM vision (OpenAI-compatible API)
 ├── frontend/                 # PWA (static): index.html / app.js / styles.css / sw.js / icons
 ├── tests/                    # pytest (targets / ratelimit / auth / api)
 ├── requirements.txt
@@ -75,8 +75,8 @@ diet-tracker/
 | Var | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Postgres connection string |
-| `GEMINI_API_KEY` | ✅ (for photo analysis) | Gemini API key |
-| `GEMINI_MODEL` | | Defaults to `gemini-2.5-flash` |
+| `NVIDIA_API_KEY` | ✅ (for photo analysis) | NVIDIA NIM API key (`nvapi-...`) from [build.nvidia.com](https://build.nvidia.com) |
+| `NVIDIA_MODEL` | | Defaults to `meta/llama-3.2-11b-vision-instruct` |
 | `INVITE_CODES` | ✅ | Comma-separated invite codes; **unset = nobody can register** |
 | `SECRET_KEY` | ✅ | JWT signing key, generate with `openssl rand -hex 32` |
 | `TOKEN_TTL_DAYS` | | Login validity in days, defaults to 30 |
@@ -95,7 +95,7 @@ The frontend uses `Intl` to **auto-detect each user's device timezone** and pass
 docker run -d --name diet-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
 
 # 2. Configure environment
-cp .env.example .env        # fill in GEMINI_API_KEY, INVITE_CODES, SECRET_KEY
+cp .env.example .env        # fill in NVIDIA_API_KEY, INVITE_CODES, SECRET_KEY
 export $(grep -v '^#' .env | xargs)
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
 
@@ -126,7 +126,7 @@ Without `DATABASE_URL`, the DB-backed API tests auto-skip and the pure-logic tes
 | POST | `/api/auth/register` | `{username, password, invite_code}` → `{token, username}` |
 | POST | `/api/auth/login` | `{username, password}` → `{token, username}` |
 | GET | `/api/auth/me` | Validate token |
-| POST | `/api/analyze` | Upload an image (multipart), returns Gemini estimate, **does not write to DB** |
+| POST | `/api/analyze` | Upload an image (multipart), returns a vision-model estimate, **does not write to DB** |
 | POST | `/api/entries` | Create one entry |
 | GET | `/api/entries?date=YYYY-MM-DD` | List a day's entries (defaults to today, user timezone) |
 | DELETE | `/api/entries/{id}` | Delete one entry |
@@ -147,7 +147,7 @@ Every `/api` route except `register`/`login` requires `Authorization: Bearer <to
 2. **Add the backend service**: deploy from this GitHub repo. Zeabur detects the `Dockerfile` (or `requirements.txt`).
 3. **Set environment variables** (backend service):
    - `DATABASE_URL` → reference Postgres's `${postgres.DATABASE_URL}`
-   - `GEMINI_API_KEY`, `GEMINI_MODEL`
+   - `NVIDIA_API_KEY`, `NVIDIA_MODEL`
    - `INVITE_CODES` (e.g. `alpha2026,bravo2026`)
    - `SECRET_KEY` (`openssl rand -hex 32`)
    - `TZ=Asia/Taipei`

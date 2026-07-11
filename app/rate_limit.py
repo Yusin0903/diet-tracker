@@ -74,7 +74,7 @@ class RateLimiter:
 class UsageLimiter:
     """Sliding-window cap on the *total* number of calls per key (not just
     failures). Used to throttle expensive endpoints such as /analyze so a
-    single (possibly invited) account can't run up the Gemini bill or DoS it.
+    single (possibly invited) account can't run up the vision API usage or DoS it.
     """
 
     def __init__(self, max_calls: int, window_s: int):

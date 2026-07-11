@@ -2,7 +2,7 @@
 
 **繁體中文** · [English](README.md)
 
-自用的飲食記錄工具:**快速記錄 + 自動加總對照每日目標**。拍食物照讓 Gemini 估熱量/蛋白、掃商品條碼(查 Open Food Facts)、手動輸入、或從常用食物一鍵記錄,首頁一眼看「今天吃了多少 / 還剩多少」。
+自用的飲食記錄工具:**快速記錄 + 自動加總對照每日目標**。拍食物照讓 NVIDIA NIM 視覺模型估熱量/蛋白、掃商品條碼(查 Open Food Facts)、手動輸入、或從常用食物一鍵記錄,首頁一眼看「今天吃了多少 / 還剩多少」。
 
 加了**會員系統**:需要**邀請碼**才能註冊(不能無腦註冊),登入後資料各自獨立。
 
@@ -33,10 +33,10 @@
 | 後端 | Python + FastAPI |
 | 資料庫 | Postgres(`DATABASE_URL` 連線) |
 | 前端 | PWA(可加到主畫面、相機拍照) |
-| AI | Gemini 2.5 Flash(vision,JSON 輸出) |
+| AI | NVIDIA NIM(`meta/llama-3.2-11b-vision-instruct`,免費方案,OpenAI 相容 API) |
 | 部署 | Zeabur |
 
-> **GEMINI_API_KEY 與邀請碼只放後端,從環境變數讀取,絕不進前端。**
+> **NVIDIA_API_KEY 與邀請碼只放後端,從環境變數讀取,絕不進前端。**
 
 ## 專案結構
 
@@ -62,7 +62,7 @@ diet-tracker/
 │       ├── users.py          # 註冊/登入/邀請碼
 │       ├── profile.py        # 目標讀寫
 │       ├── targets.py        # TDEE / 熱量 / 蛋白估算
-│       └── gemini.py         # Gemini 2.5 Flash vision
+│       └── nvidia.py         # NVIDIA NIM vision(OpenAI 相容 API)
 ├── frontend/                 # PWA(static):index.html / app.js / styles.css / sw.js / icons
 ├── tests/                    # pytest(targets / ratelimit / auth / api)
 ├── requirements.txt
@@ -75,8 +75,8 @@ diet-tracker/
 | 變數 | 必填 | 說明 |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Postgres 連線字串 |
-| `GEMINI_API_KEY` | ✅(要用拍照辨識) | Gemini API key |
-| `GEMINI_MODEL` | | 預設 `gemini-2.5-flash` |
+| `NVIDIA_API_KEY` | ✅(要用拍照辨識) | 到 [build.nvidia.com](https://build.nvidia.com) 申請的 NVIDIA NIM API key(`nvapi-...`) |
+| `NVIDIA_MODEL` | | 預設 `meta/llama-3.2-11b-vision-instruct` |
 | `INVITE_CODES` | ✅ | 逗號分隔的邀請碼,**沒設就沒人能註冊** |
 | `SECRET_KEY` | ✅ | JWT 簽章密鑰,用 `openssl rand -hex 32` 產生 |
 | `TOKEN_TTL_DAYS` | | 登入有效天數,預設 30 |
@@ -95,7 +95,7 @@ diet-tracker/
 docker run -d --name diet-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
 
 # 2. 設定環境變數
-cp .env.example .env        # 編輯填入 GEMINI_API_KEY、INVITE_CODES、SECRET_KEY
+cp .env.example .env        # 編輯填入 NVIDIA_API_KEY、INVITE_CODES、SECRET_KEY
 export $(grep -v '^#' .env | xargs)
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
 
@@ -126,7 +126,7 @@ pytest
 | POST | `/api/auth/register` | `{username, password, invite_code}` → `{token, username}` |
 | POST | `/api/auth/login` | `{username, password}` → `{token, username}` |
 | GET | `/api/auth/me` | 驗證 token |
-| POST | `/api/analyze` | 上傳圖片(multipart),回 Gemini 估值,**不寫 DB** |
+| POST | `/api/analyze` | 上傳圖片(multipart),回視覺模型估值,**不寫 DB** |
 | POST | `/api/entries` | 寫入一筆記錄 |
 | GET | `/api/entries?date=YYYY-MM-DD` | 查某日記錄(預設今天,台北時區) |
 | DELETE | `/api/entries/{id}` | 刪一筆 |
@@ -147,7 +147,7 @@ pytest
 2. **加後端 service**:從這個 GitHub repo 部署。Zeabur 會偵測到 `Dockerfile`(或 `requirements.txt`)。
 3. **設環境變數**(後端 service):
    - `DATABASE_URL` → 引用 Postgres 的 `${postgres.DATABASE_URL}`
-   - `GEMINI_API_KEY`、`GEMINI_MODEL`
+   - `NVIDIA_API_KEY`、`NVIDIA_MODEL`
    - `INVITE_CODES`(例:`alpha2026,bravo2026`)
    - `SECRET_KEY`(`openssl rand -hex 32`)
    - `TZ=Asia/Taipei`
