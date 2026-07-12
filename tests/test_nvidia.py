@@ -1,7 +1,10 @@
 """NVIDIA vision prompt 組裝 + JSON 防呆解析的單元測試(不呼叫網路)。"""
-import pytest
+import io
 
-from app.services.nvidia import ANALYZE_PROMPT, _extract_json, build_prompt
+import pytest
+from PIL import Image
+
+from app.services.nvidia import ANALYZE_PROMPT, _extract_json, build_prompt, normalize_to_jpeg
 
 
 def test_plain_prompt_unchanged():
@@ -35,3 +38,42 @@ def test_extract_json_stray_prose():
 def test_extract_json_unparseable_raises():
     with pytest.raises(ValueError):
         _extract_json("我沒辦法分析這張照片。")
+
+
+def _png_bytes(size=(400, 300), color=(200, 100, 50)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _heic_bytes(size=(400, 300), color=(80, 160, 120)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", size, color=color).save(buf, format="HEIF", quality=80)
+    return buf.getvalue()
+
+
+def test_normalize_to_jpeg_plain_format():
+    out = normalize_to_jpeg(_png_bytes())
+    img = Image.open(io.BytesIO(out))
+    assert img.format == "JPEG"
+
+
+def test_normalize_to_jpeg_downscales_oversized_photos():
+    out = normalize_to_jpeg(_png_bytes(size=(4000, 3000)), max_dim=1600)
+    img = Image.open(io.BytesIO(out))
+    assert max(img.size) <= 1600
+
+
+def test_normalize_to_jpeg_handles_heic():
+    # Regression test: Android Chrome generally can't decode HEIC/HEIF client
+    # side (unlike iOS Safari), so the frontend's best-effort canvas
+    # conversion falls back to the untouched original file on those devices —
+    # this backend step is what must actually succeed regardless.
+    out = normalize_to_jpeg(_heic_bytes())
+    img = Image.open(io.BytesIO(out))
+    assert img.format == "JPEG"
+
+
+def test_normalize_to_jpeg_rejects_garbage():
+    with pytest.raises(Exception):
+        normalize_to_jpeg(b"not an image" * 50)

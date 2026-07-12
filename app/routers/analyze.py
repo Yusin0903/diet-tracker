@@ -34,7 +34,7 @@ async def analyze(
     if not image_bytes:
         raise HTTPException(status_code=400, detail="沒有讀到圖片內容")
     try:
-        result = analyze_food_image(image_bytes, file.content_type or "image/jpeg", hint)
+        result = analyze_food_image(image_bytes, hint)
     except Exception:  # noqa: BLE001
         # Log the detail server-side, return a generic message (don't leak internals).
         logger.exception("Vision analyze failed")
