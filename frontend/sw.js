@@ -1,6 +1,15 @@
 // Service worker: caches only static files (the shell); API always hits the network.
-const CACHE = "diet-shell-v29";
-const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.json"];
+//
+// index.html links to app.js/styles.css with a "?v=N" query string (see
+// index.html) instead of bare paths. That's deliberate: a versioned URL is a
+// guaranteed cache miss for both the browser's HTTP cache and this SW's own
+// Cache Storage, so a fresh index.html (served with Cache-Control: no-cache,
+// see app/main.py) always pulls the matching fresh JS/CSS on the very next
+// load — even from a stuck OLD service worker that hasn't self-updated yet.
+// Bump VERSION here AND in index.html together on every frontend change.
+const VERSION = 30;
+const CACHE = `diet-shell-v${VERSION}`;
+const SHELL = ["/", "/index.html", `/styles.css?v=${VERSION}`, `/app.js?v=${VERSION}`, "/manifest.json"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
