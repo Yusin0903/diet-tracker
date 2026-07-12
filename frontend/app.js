@@ -505,49 +505,38 @@ function pickPhoto(useCamera) {
   input.click();
 }
 
-// Normalize every photo to JPEG via canvas before upload, regardless of the
-// source container (HEIC from the iOS photo library being the common one) —
-// the vision API's decoder is stricter than Gemini's was and rejects formats
-// like HEIC outright. Also downscales oversized photos (faster upload, stays
-// under the size cap). The browser only needs to be able to *display* the
-// original format (Safari decodes HEIC natively), not the backend.
-function fileToJpegBlob(file, maxDim = 1600, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-      const w = Math.round(img.naturalWidth * scale);
-      const h = Math.round(img.naturalHeight * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("圖片轉檔失敗"))),
-        "image/jpeg",
-        quality
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("這張照片無法讀取,換一張試試"));
-    };
-    img.src = url;
-  });
+// Best-effort: normalize to JPEG (via createImageBitmap + canvas) before
+// upload, since the vision API's decoder is stricter than Gemini's was and
+// rejects formats like HEIC outright (common from the iOS photo library).
+// Also downscales oversized photos (faster upload, stays under the size cap).
+// Conversion is purely an optimization, though — a full-resolution camera
+// shot can be large enough to make it fail or time out on some phones, and
+// that must never be able to block a photo that used to upload just fine.
+// So on any failure this falls back to the original file as-is.
+async function toJpegForUpload(file, maxDim = 1600, quality = 0.85) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    bitmap.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (blob) return new File([blob], "photo.jpg", { type: "image/jpeg" });
+  } catch (err) {
+    // Conversion failed (huge photo, decode hiccup, unsupported source, …) —
+    // fall through and use the original file untouched.
+  }
+  return file;
 }
 
 async function handlePhoto(file) {
   if (!file) return;
   if (_photoUrl) URL.revokeObjectURL(_photoUrl);
-  try {
-    const jpegBlob = await fileToJpegBlob(file);
-    _photoFile = new File([jpegBlob], "photo.jpg", { type: "image/jpeg" });
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
+  _photoFile = await toJpegForUpload(file);
   _photoUrl = URL.createObjectURL(_photoFile);
   photoHintStep("");
 }
