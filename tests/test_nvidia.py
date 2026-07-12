@@ -20,6 +20,20 @@ def test_hint_is_appended():
     assert "補充說明" in p
 
 
+def test_prompt_has_no_copyable_example_values():
+    # Regression: the old prompt's worked example ("雞胸便當", 431 kcal,
+    # 38.0g protein) was a concrete, plausible-looking real answer, and the
+    # (smaller, 11B) vision model kept parroting those exact numbers back
+    # verbatim regardless of what was actually in the photo — a known
+    # failure mode where a weaker instruction-following model treats a
+    # worked example as "the answer" instead of a format template. The
+    # prompt must use obvious placeholders and say not to copy them.
+    assert "431" not in ANALYZE_PROMPT
+    assert "38.0" not in ANALYZE_PROMPT
+    assert "雞胸便當" not in ANALYZE_PROMPT
+    assert "照抄" in ANALYZE_PROMPT
+
+
 def test_extract_json_plain():
     assert _extract_json('{"name": "便當", "calories": 500}') == {"name": "便當", "calories": 500}
 
