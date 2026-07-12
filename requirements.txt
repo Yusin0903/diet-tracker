@@ -4,6 +4,8 @@ psycopg2-binary==2.9.10
 python-multipart==0.0.20
 PyJWT==2.10.1
 openai==2.45.0
+Pillow==12.3.0
+pillow-heif==1.4.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 

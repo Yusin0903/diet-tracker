@@ -3,14 +3,28 @@
 跟 Gemini 不同,開源視覺模型的 JSON 模式不保證乾淨,所以除了在 prompt 裡強制
 「只回 JSON」,還多一層防呆:先直接 parse,失敗再從回應文字挖出
 ```json ... ``` 或第一個 {...} 區塊。API key 只在後端。
+
+圖片一律在後端用 Pillow 重新編碼成 JPEG 再送給模型 —— 前端雖然也會盡量轉檔,
+但那只是「盡力而為」:Android 上的 Chrome 大多不支援解 HEIC/HEIF(不像
+iOS Safari 有內建系統級解碼器),前端轉檔在這類裝置上必然失敗、只能退回原始
+檔案,而視覺模型的解碼器一樣吃不下 HEIC/HEIF,結果又是同一個「cannot
+identify image file」錯誤。後端這一步用 pillow-heif 掛的 HEIF/HEIC 解碼器
+不依賴瀏覽器能力,才是真正保底、不管來源裝置/瀏覽器是什麼都能處理的地方。
 """
 import base64
+import io
 import json
 import re
 
+import pillow_heif
 from openai import OpenAI
+from PIL import Image
 
 from app.settings import settings
+
+pillow_heif.register_heif_opener()  # 讓 PIL.Image.open() 認得 .heic / .heif
+
+_MAX_DIM = 1600  # 長邊上限,跟前端轉檔的設定一致
 
 ANALYZE_PROMPT = """你是營養估算助手。分析這張食物照片,估算整份餐點的熱量與蛋白質。
 規則:
@@ -71,11 +85,21 @@ def _extract_json(text: str) -> dict:
     raise ValueError("模型沒有回傳可解析的 JSON")
 
 
-def analyze_food_image(
-    image_bytes: bytes, mime_type: str = "image/jpeg", hint: str | None = None
-) -> dict:
+def normalize_to_jpeg(image_bytes: bytes, max_dim: int = _MAX_DIM, quality: int = 85) -> bytes:
+    """不管來源格式/裝置為何,一律解碼後重新編碼成 JPEG(順便縮到長邊上限)。"""
+    img = Image.open(io.BytesIO(image_bytes))
+    img = img.convert("RGB")
+    if max(img.size) > max_dim:
+        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def analyze_food_image(image_bytes: bytes, hint: str | None = None) -> dict:
     client = _get_client()
-    b64 = base64.b64encode(image_bytes).decode("ascii")
+    jpeg_bytes = normalize_to_jpeg(image_bytes)
+    b64 = base64.b64encode(jpeg_bytes).decode("ascii")
     resp = client.chat.completions.create(
         model=settings.nvidia_model,
         temperature=0.2,
@@ -85,7 +109,7 @@ def analyze_food_image(
                 "role": "user",
                 "content": [
                     {"type": "text", "text": build_prompt(hint)},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
                 ],
             }
         ],
