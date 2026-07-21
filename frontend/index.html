@@ -254,6 +254,17 @@
     </div>
   </div>
 
+  <!-- Delete confirmation — a separate overlay so it can stack above the generic modal -->
+  <div id="confirm-overlay" class="modal-overlay confirm-overlay" hidden>
+    <div class="modal confirm-modal">
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button class="btn-danger" id="confirm-ok">刪除</button>
+        <button class="ghost-btn fullw" id="confirm-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="/app.js?v=30"></script>

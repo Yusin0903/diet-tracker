@@ -375,6 +375,7 @@ function openEntryEdit(e) {
     }
   });
   $("e-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆記錄嗎?"))) return;
     try {
       await api(`/api/entries/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -406,6 +407,33 @@ function closeModal() {
   stopScan(); // Always stop the camera when the modal closes
   $("modal").hidden = true;
   $("modal-body").innerHTML = "";
+}
+
+// Every destructive action should ask once more before it actually happens.
+// This is a separate overlay (not the generic #modal) so it can stack above
+// a modal that's already open — e.g. confirming a set delete from inside the
+// strength editor without losing that modal's contents underneath.
+function confirmDelete(message = "確定要刪除嗎?此動作無法復原。") {
+  return new Promise((resolve) => {
+    const overlay = $("confirm-overlay");
+    const okBtn = $("confirm-ok");
+    const cancelBtn = $("confirm-cancel");
+    $("confirm-message").textContent = message;
+    overlay.hidden = false;
+    const finish = (result) => {
+      overlay.hidden = true;
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onBackdrop);
+      resolve(result);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (e) => { if (e.target === overlay) finish(false); };
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onBackdrop);
+  });
 }
 
 function confirmForm(prefill, source) {
@@ -633,6 +661,7 @@ async function openFavorites() {
         });
       });
       row.querySelector('[data-act="del"]').addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要刪除常用食物「${f.name}」嗎?`))) return;
         try {
           await api(`/api/foods/${id}`, { method: "DELETE" });
           openFavorites();
@@ -1276,6 +1305,7 @@ function openRecipeDetail(r, readonly = false) {
   if (logBtn) logBtn.addEventListener("click", () => logRecipe(r));
   $("rd-edit").addEventListener("click", () => openRecipeForm(r));
   $("rd-del").addEventListener("click", async () => {
+    if (!(await confirmDelete(`確定要刪除食譜「${r.name}」嗎?`))) return;
     try {
       await api(`/api/recipes/${r.id}`, { method: "DELETE" });
       closeModal();
@@ -1537,6 +1567,7 @@ function openExerciseDetail(e) {
      <button class="btn-danger" id="ex-del">刪除這筆記錄</button>`
   );
   $("ex-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆運動記錄嗎?"))) return;
     try {
       await api(`/api/exercises/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -1603,6 +1634,8 @@ function renderStrengthBody(e, movements) {
   $("mv-list").querySelectorAll(".mv-card").forEach((card) => {
     const mid = card.dataset.mv;
     card.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      const name = card.querySelector(".mv-name").textContent;
+      if (!(await confirmDelete(`確定要刪除動作「${name}」嗎?組數也會一併刪除。`))) return;
       try {
         await api(`/api/exercises/movements/${mid}`, { method: "DELETE" });
         reload();
@@ -1667,6 +1700,7 @@ function renderStrengthBody(e, movements) {
   });
 
   $("ex-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆運動記錄嗎?"))) return;
     try {
       await api(`/api/exercises/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -1783,6 +1817,8 @@ async function renderPlansList() {
       }
     });
     row.querySelector('[data-act="del"]').addEventListener("click", async () => {
+      const name = row.querySelector(".friend-name").textContent;
+      if (!(await confirmDelete(`確定要刪除菜單「${name}」嗎?`))) return;
       try {
         await api(`/api/workout-plans/${pid}`, { method: "DELETE" });
         renderPlansList();
@@ -1871,6 +1907,8 @@ function renderPlanEditorBody(plan) {
     row.querySelector(".plan-mv-name").addEventListener("change", saveMovement);
     row.querySelectorAll(".plan-mv-num").forEach((inp) => inp.addEventListener("change", saveMovement));
     row.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      const name = row.querySelector(".plan-mv-name").value;
+      if (!(await confirmDelete(`確定要從菜單移除動作「${name}」嗎?`))) return;
       try {
         await api(`/api/workout-plans/movements/${mid}`, { method: "DELETE" });
         const fresh = await api(`/api/workout-plans/${plan.id}`);
@@ -1899,6 +1937,7 @@ function renderPlanEditorBody(plan) {
   });
 
   $("plan-del").addEventListener("click", async () => {
+    if (!(await confirmDelete(`確定要刪除整個菜單「${plan.name}」嗎?裡面的動作也會一併刪除。`))) return;
     try {
       await api(`/api/workout-plans/${plan.id}`, { method: "DELETE" });
       closeModal();
@@ -1980,9 +2019,16 @@ async function loadFriends() {
       const accept = row.querySelector('[data-act="accept"]');
       const reject = row.querySelector('[data-act="reject"]');
       const cancel = row.querySelector('[data-act="cancel"]');
+      const friendName = row.querySelector(".friend-name")?.textContent || "";
       if (accept) accept.addEventListener("click", () => friendAction(`/api/friends/${fid}/accept`, "POST"));
-      if (reject) reject.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
-      if (cancel) cancel.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
+      if (reject) reject.addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要拒絕「${friendName}」的好友邀請嗎?`))) return;
+        friendAction(`/api/friends/${fid}`, "DELETE");
+      });
+      if (cancel) cancel.addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要取消寄給「${friendName}」的邀請嗎?`))) return;
+        friendAction(`/api/friends/${fid}`, "DELETE");
+      });
       if (row.classList.contains("tappable"))
         row.addEventListener("click", () => openFriendFeed(row.dataset.uid, row.dataset.name));
     });
