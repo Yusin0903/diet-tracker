@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@500;600;700&family=Shippori+Mincho:wght@600;700&display=swap" rel="stylesheet" />
   <!-- ?v=N cache-busts app.js/styles.css on every deploy — bump alongside VERSION in sw.js -->
-  <link rel="stylesheet" href="/styles.css?v=30" />
+  <link rel="stylesheet" href="/styles.css?v=32" />
   <title>好好吃飯</title>
 </head>
 <body>
@@ -254,8 +254,19 @@
     </div>
   </div>
 
+  <!-- Delete confirmation — a separate overlay so it can stack above the generic modal -->
+  <div id="confirm-overlay" class="modal-overlay confirm-overlay" hidden>
+    <div class="modal confirm-modal">
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button class="btn-danger" id="confirm-ok">刪除</button>
+        <button class="ghost-btn fullw" id="confirm-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script src="/app.js?v=30"></script>
+  <script src="/app.js?v=32"></script>
 </body>
 </html>

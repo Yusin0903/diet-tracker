@@ -375,6 +375,7 @@ function openEntryEdit(e) {
     }
   });
   $("e-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆記錄嗎?"))) return;
     try {
       await api(`/api/entries/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -406,6 +407,33 @@ function closeModal() {
   stopScan(); // Always stop the camera when the modal closes
   $("modal").hidden = true;
   $("modal-body").innerHTML = "";
+}
+
+// Every destructive action should ask once more before it actually happens.
+// This is a separate overlay (not the generic #modal) so it can stack above
+// a modal that's already open — e.g. confirming a set delete from inside the
+// strength editor without losing that modal's contents underneath.
+function confirmDelete(message = "確定要刪除嗎?此動作無法復原。") {
+  return new Promise((resolve) => {
+    const overlay = $("confirm-overlay");
+    const okBtn = $("confirm-ok");
+    const cancelBtn = $("confirm-cancel");
+    $("confirm-message").textContent = message;
+    overlay.hidden = false;
+    const finish = (result) => {
+      overlay.hidden = true;
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onBackdrop);
+      resolve(result);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (e) => { if (e.target === overlay) finish(false); };
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onBackdrop);
+  });
 }
 
 function confirmForm(prefill, source) {
@@ -633,6 +661,7 @@ async function openFavorites() {
         });
       });
       row.querySelector('[data-act="del"]').addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要刪除常用食物「${f.name}」嗎?`))) return;
         try {
           await api(`/api/foods/${id}`, { method: "DELETE" });
           openFavorites();
@@ -1276,6 +1305,7 @@ function openRecipeDetail(r, readonly = false) {
   if (logBtn) logBtn.addEventListener("click", () => logRecipe(r));
   $("rd-edit").addEventListener("click", () => openRecipeForm(r));
   $("rd-del").addEventListener("click", async () => {
+    if (!(await confirmDelete(`確定要刪除食譜「${r.name}」嗎?`))) return;
     try {
       await api(`/api/recipes/${r.id}`, { method: "DELETE" });
       closeModal();
@@ -1537,6 +1567,7 @@ function openExerciseDetail(e) {
      <button class="btn-danger" id="ex-del">刪除這筆記錄</button>`
   );
   $("ex-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆運動記錄嗎?"))) return;
     try {
       await api(`/api/exercises/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -1593,6 +1624,12 @@ function renderStrengthBody(e, movements) {
       <input id="mv-new-name" type="text" placeholder="新增動作,例如:槓鈴臥推" autocomplete="off" />
       <button class="pill-btn" id="mv-new-add">＋</button>
     </div>
+    ${movements.length ? `
+    <button class="pill-btn ghost" id="ex-save-plan" style="width:100%;justify-content:center;margin-top:14px">＋ 把今天這組存成菜單</button>
+    <div class="mv-add-row" id="save-plan-row" hidden>
+      <input id="save-plan-name" type="text" placeholder="菜單名稱,例如:上肢菜單" autocomplete="off" />
+      <button class="pill-btn" id="save-plan-go">儲存</button>
+    </div>` : ""}
     <button class="btn-danger" id="ex-del" style="margin-top:16px">刪除這筆記錄</button>`;
 
   const reload = async () => {
@@ -1603,6 +1640,8 @@ function renderStrengthBody(e, movements) {
   $("mv-list").querySelectorAll(".mv-card").forEach((card) => {
     const mid = card.dataset.mv;
     card.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      const name = card.querySelector(".mv-name").textContent;
+      if (!(await confirmDelete(`確定要刪除動作「${name}」嗎?組數也會一併刪除。`))) return;
       try {
         await api(`/api/exercises/movements/${mid}`, { method: "DELETE" });
         reload();
@@ -1666,7 +1705,32 @@ function renderStrengthBody(e, movements) {
     }
   });
 
+  // 把今天已經記錄的動作/組數存成一份新菜單,下次直接套用(跟「使用菜單」互為反向)。
+  const savePlanBtn = $("ex-save-plan");
+  if (savePlanBtn) {
+    savePlanBtn.addEventListener("click", () => {
+      $("save-plan-row").hidden = false;
+      $("save-plan-name").focus();
+    });
+    $("save-plan-go").addEventListener("click", async () => {
+      const name = $("save-plan-name").value.trim();
+      if (!name) {
+        toast("請輸入菜單名稱", true);
+        return;
+      }
+      try {
+        await api(`/api/workout-plans/from-exercise/${e.id}`, { method: "POST", body: { name } });
+        toast(`已存成菜單「${name}」✓`);
+        $("save-plan-row").hidden = true;
+        $("save-plan-name").value = "";
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  }
+
   $("ex-del").addEventListener("click", async () => {
+    if (!(await confirmDelete("確定要刪除這筆運動記錄嗎?"))) return;
     try {
       await api(`/api/exercises/${e.id}`, { method: "DELETE" });
       closeModal();
@@ -1698,6 +1762,13 @@ function openExerciseForm() {
   const grid = $("ex-type-grid");
   grid.querySelectorAll(".ex-type-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      // 重訓走菜單流程:先挑(或先建立)一份菜單,套用時動作/組數/次數會
+      // 直接帶入,不再開一筆空白的重訓記錄要使用者從零手動加動作。
+      if (btn.dataset.type === "strength") {
+        closeModal();
+        openPlansList();
+        return;
+      }
       chosen = btn.dataset.type;
       grid.querySelectorAll(".ex-type-btn").forEach((b) => b.classList.toggle("active", b === btn));
       $("ex-distance-field").hidden = !EX_BY_KEY[chosen].hasDistance;
@@ -1783,6 +1854,8 @@ async function renderPlansList() {
       }
     });
     row.querySelector('[data-act="del"]').addEventListener("click", async () => {
+      const name = row.querySelector(".friend-name").textContent;
+      if (!(await confirmDelete(`確定要刪除菜單「${name}」嗎?`))) return;
       try {
         await api(`/api/workout-plans/${pid}`, { method: "DELETE" });
         renderPlansList();
@@ -1871,6 +1944,8 @@ function renderPlanEditorBody(plan) {
     row.querySelector(".plan-mv-name").addEventListener("change", saveMovement);
     row.querySelectorAll(".plan-mv-num").forEach((inp) => inp.addEventListener("change", saveMovement));
     row.querySelector('[data-act="del-mv"]').addEventListener("click", async () => {
+      const name = row.querySelector(".plan-mv-name").value;
+      if (!(await confirmDelete(`確定要從菜單移除動作「${name}」嗎?`))) return;
       try {
         await api(`/api/workout-plans/movements/${mid}`, { method: "DELETE" });
         const fresh = await api(`/api/workout-plans/${plan.id}`);
@@ -1899,6 +1974,7 @@ function renderPlanEditorBody(plan) {
   });
 
   $("plan-del").addEventListener("click", async () => {
+    if (!(await confirmDelete(`確定要刪除整個菜單「${plan.name}」嗎?裡面的動作也會一併刪除。`))) return;
     try {
       await api(`/api/workout-plans/${plan.id}`, { method: "DELETE" });
       closeModal();
@@ -1980,9 +2056,16 @@ async function loadFriends() {
       const accept = row.querySelector('[data-act="accept"]');
       const reject = row.querySelector('[data-act="reject"]');
       const cancel = row.querySelector('[data-act="cancel"]');
+      const friendName = row.querySelector(".friend-name")?.textContent || "";
       if (accept) accept.addEventListener("click", () => friendAction(`/api/friends/${fid}/accept`, "POST"));
-      if (reject) reject.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
-      if (cancel) cancel.addEventListener("click", () => friendAction(`/api/friends/${fid}`, "DELETE"));
+      if (reject) reject.addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要拒絕「${friendName}」的好友邀請嗎?`))) return;
+        friendAction(`/api/friends/${fid}`, "DELETE");
+      });
+      if (cancel) cancel.addEventListener("click", async () => {
+        if (!(await confirmDelete(`確定要取消寄給「${friendName}」的邀請嗎?`))) return;
+        friendAction(`/api/friends/${fid}`, "DELETE");
+      });
       if (row.classList.contains("tappable"))
         row.addEventListener("click", () => openFriendFeed(row.dataset.uid, row.dataset.name));
     });
