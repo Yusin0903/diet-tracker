@@ -1,28 +1,26 @@
 """當日攝取加總 + 對照目標(summary 路由與好友動態共用)。"""
 from datetime import datetime
 
-from app.db import get_cursor
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.models import Entry
 from app.services.profile import get_profile
 
 
-def day_summary(user_id: int, start: datetime, end: datetime) -> dict:
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT COALESCE(SUM(calories), 0) AS calories,
-                   COALESCE(SUM(protein_g), 0) AS protein_g
-            FROM entries
-            WHERE user_id = %s AND eaten_at >= %s AND eaten_at < %s
-            """,
-            (user_id, start, end),
-        )
-        agg = cur.fetchone()
+def day_summary(user_id: int, start: datetime, end: datetime, db: Session) -> dict:
+    agg = db.execute(
+        select(
+            func.coalesce(func.sum(Entry.calories), 0),
+            func.coalesce(func.sum(Entry.protein_g), 0),
+        ).where(Entry.user_id == user_id, Entry.eaten_at >= start, Entry.eaten_at < end)
+    ).one()
 
-    consumed_cal = int(agg["calories"])
-    consumed_pro = float(agg["protein_g"])
+    consumed_cal = int(agg[0])
+    consumed_pro = float(agg[1])
     consumed = {"calories": consumed_cal, "protein_g": round(consumed_pro, 1)}
 
-    prof = get_profile(user_id)
+    prof = get_profile(user_id, db)
     if prof is None:
         return {
             "has_profile": False,

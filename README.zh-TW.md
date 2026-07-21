@@ -77,12 +77,12 @@ diet-tracker/
 ├── app/                      # FastAPI 應用套件
 │   ├── main.py               # 組裝 app:lifespan、include routers、mount 靜態檔
 │   ├── settings.py           # pydantic-settings 設定(環境變數、seed 食物)
-│   ├── db.py                 # Postgres 連線池、建表
+│   ├── db.py                 # SQLAlchemy engine/session、建表
 │   ├── security.py           # 密碼雜湊、JWT、current_user 依賴
 │   ├── rate_limit.py         # per-IP 速率限制(擋暴力嘗試)
 │   ├── deps.py               # 時區解析、日界線、entry 序列化
 │   ├── schemas.py            # Pydantic 請求模型
-│   ├── sql/schema.sql        # users / profiles / entries / foods
+│   ├── models.py             # SQLAlchemy 2.0 ORM 模型(資料庫結構的唯一來源)
 │   ├── routers/              # 各資源一個 APIRouter
 │   │   ├── auth.py           # /api/auth(註冊/登入/me)
 │   │   ├── analyze.py        # /api/analyze

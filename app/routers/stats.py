@@ -3,9 +3,12 @@ from datetime import datetime, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import Date, cast, func, select
+from sqlalchemy.orm import Session
 
-from app.db import get_cursor
+from app.db import get_db
 from app.deps import resolve_tz
+from app.models import Entry
 from app.security import current_user
 from app.services.profile import get_profile
 
@@ -18,6 +21,7 @@ def stats(
     end: str,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
     zone = resolve_tz(tz)
     try:
@@ -34,25 +38,20 @@ def stats(
     end_dt = datetime.combine(d1 + timedelta(days=1), time.min, tzinfo=zone)
     tzname = getattr(zone, "key", "Asia/Taipei")  # 給 SQL 用的 IANA 名稱
 
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT timezone(%s, eaten_at)::date AS day,
-                   COALESCE(SUM(calories), 0) AS calories,
-                   COALESCE(SUM(protein_g), 0) AS protein_g
-            FROM entries
-            WHERE user_id = %s AND eaten_at >= %s AND eaten_at < %s
-            GROUP BY day
-            """,
-            (tzname, user["id"], start_dt, end_dt),
+    day_expr = cast(func.timezone(tzname, Entry.eaten_at), Date)
+    rows = db.execute(
+        select(
+            day_expr.label("day"),
+            func.coalesce(func.sum(Entry.calories), 0),
+            func.coalesce(func.sum(Entry.protein_g), 0),
         )
-        by_day = {
-            r["day"].isoformat(): {
-                "calories": int(r["calories"]),
-                "protein_g": float(r["protein_g"]),
-            }
-            for r in cur.fetchall()
-        }
+        .where(Entry.user_id == user["id"], Entry.eaten_at >= start_dt, Entry.eaten_at < end_dt)
+        .group_by(day_expr)
+    ).all()
+    by_day = {
+        day.isoformat(): {"calories": int(cal), "protein_g": float(pro)}
+        for day, cal, pro in rows
+    }
 
     # 補滿區間內每一天(沒記錄的填 0),讓前端長條圖連續
     days = []
@@ -63,7 +62,7 @@ def stats(
         days.append({"date": key, "calories": v["calories"], "protein_g": round(v["protein_g"], 1)})
         cur_day += timedelta(days=1)
 
-    prof = get_profile(user["id"])
+    prof = get_profile(user["id"], db)
     targets = (
         {
             "calories_min": prof["calories_min"],

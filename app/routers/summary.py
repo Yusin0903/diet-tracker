@@ -6,7 +6,9 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from app.db import get_db
 from app.deps import day_bounds, resolve_tz
 from app.security import current_user
 from app.services.summary import day_summary
@@ -19,6 +21,7 @@ def summary(
     date: Optional[str] = None,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
     start, end, day_str = day_bounds(date, resolve_tz(tz))
-    return {"date": day_str, **day_summary(user["id"], start, end)}
+    return {"date": day_str, **day_summary(user["id"], start, end, db)}

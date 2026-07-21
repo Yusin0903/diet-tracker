@@ -1,6 +1,8 @@
 """每位會員的每日目標:估算預覽 / 讀取 / 儲存。"""
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
+from app.db import get_db
 from app.schemas import ProfileIn
 from app.security import current_user
 from app.services import targets
@@ -10,8 +12,8 @@ router = APIRouter(prefix="/api/profile", tags=["profile"])
 
 
 @router.get("")
-def read_profile(user: dict = Depends(current_user)):
-    return {"profile": get_profile(user["id"])}
+def read_profile(user: dict = Depends(current_user), db: Session = Depends(get_db)):
+    return {"profile": get_profile(user["id"], db)}
 
 
 @router.post("/preview")
@@ -24,11 +26,13 @@ def preview_profile(body: ProfileIn, user: dict = Depends(current_user)):
 
 
 @router.put("")
-def update_profile(body: ProfileIn, user: dict = Depends(current_user)):
+def update_profile(
+    body: ProfileIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
     data = body.model_dump()
     try:
         result = targets.compute(data)
     except targets.TargetError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    save_profile(user["id"], data, result)
-    return {"saved": True, "result": result, "profile": get_profile(user["id"])}
+    save_profile(user["id"], data, result, db)
+    return {"saved": True, "result": result, "profile": get_profile(user["id"], db)}

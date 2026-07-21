@@ -1,55 +1,61 @@
 """常用食物清單(每位會員各自一份)。"""
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 
-from app.db import get_cursor
+from app.db import get_db
+from app.models import Food
 from app.schemas import FoodIn
 from app.security import current_user
 
 router = APIRouter(prefix="/api/foods", tags=["foods"])
 
 
-def _row(r: dict) -> dict:
+def _row(f: Food) -> dict:
     return {
-        "id": r["id"],
-        "name": r["name"],
-        "calories": r["calories"],
-        "protein_g": float(r["protein_g"]),
+        "id": f.id,
+        "name": f.name,
+        "calories": f.calories,
+        "protein_g": float(f.protein_g),
     }
 
 
 @router.get("")
-def list_foods(user: dict = Depends(current_user)):
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT id, name, calories, protein_g FROM foods WHERE user_id = %s ORDER BY name",
-            (user["id"],),
-        )
-        return [_row(r) for r in cur.fetchall()]
+def list_foods(user: dict = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Food).where(Food.user_id == user["id"]).order_by(Food.name)
+    ).scalars()
+    return [_row(r) for r in rows]
 
 
 @router.post("")
-def create_food(body: FoodIn, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO foods (user_id, name, calories, protein_g)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id, name)
-            DO UPDATE SET calories = EXCLUDED.calories, protein_g = EXCLUDED.protein_g
-            RETURNING id, name, calories, protein_g
-            """,
-            (user["id"], body.name, body.calories, body.protein_g),
+def create_food(
+    body: FoodIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    stmt = (
+        pg_insert(Food)
+        .values(
+            user_id=user["id"], name=body.name, calories=body.calories, protein_g=body.protein_g
         )
-        return _row(cur.fetchone())
+        .on_conflict_do_update(
+            index_elements=[Food.user_id, Food.name],
+            set_={"calories": body.calories, "protein_g": body.protein_g},
+        )
+        .returning(Food)
+    )
+    food = db.scalars(stmt).one()
+    return _row(food)
 
 
 @router.delete("/{food_id}")
-def delete_food(food_id: int, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "DELETE FROM foods WHERE id = %s AND user_id = %s RETURNING id",
-            (food_id, user["id"]),
-        )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這個食物")
+def delete_food(
+    food_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    food = db.execute(
+        select(Food).where(Food.id == food_id, Food.user_id == user["id"])
+    ).scalar_one_or_none()
+    if food is None:
+        raise HTTPException(status_code=404, detail="找不到這個食物")
+    db.delete(food)
     return {"ok": True}

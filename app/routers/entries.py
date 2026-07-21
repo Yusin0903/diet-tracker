@@ -3,9 +3,12 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.db import get_cursor
+from app.db import get_db
 from app.deps import day_bounds, resolve_tz, serialize_entry
+from app.models import Entry
 from app.schemas import EntryEdit, EntryIn
 from app.security import current_user
 
@@ -18,6 +21,7 @@ def create_entry(
     date: Optional[str] = None,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
     if body.source not in ("photo", "manual", "favorite", "barcode", "recipe"):
         raise HTTPException(status_code=400, detail="source 不合法")
@@ -30,17 +34,19 @@ def create_entry(
         eaten_at = datetime.combine(start.date(), datetime.now(zone).time(), tzinfo=zone)
     else:
         eaten_at = datetime.now(zone)
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO entries (user_id, eaten_at, name, calories, protein_g, source, note)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id, eaten_at, name, calories, protein_g, source, note
-            """,
-            (user["id"], eaten_at, body.name, body.calories, body.protein_g, body.source, body.note),
-        )
-        row = cur.fetchone()
-    return serialize_entry(row, zone)
+
+    entry = Entry(
+        user_id=user["id"],
+        eaten_at=eaten_at,
+        name=body.name,
+        calories=body.calories,
+        protein_g=body.protein_g,
+        source=body.source,
+        note=body.note,
+    )
+    db.add(entry)
+    db.flush()
+    return serialize_entry(entry, zone)
 
 
 @router.get("")
@@ -48,20 +54,15 @@ def list_entries(
     date: Optional[str] = None,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
     zone = resolve_tz(tz)
     start, end, _ = day_bounds(date, zone)
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, eaten_at, name, calories, protein_g, source, note
-            FROM entries
-            WHERE user_id = %s AND eaten_at >= %s AND eaten_at < %s
-            ORDER BY eaten_at DESC
-            """,
-            (user["id"], start, end),
-        )
-        rows = cur.fetchall()
+    rows = db.execute(
+        select(Entry)
+        .where(Entry.user_id == user["id"], Entry.eaten_at >= start, Entry.eaten_at < end)
+        .order_by(Entry.eaten_at.desc())
+    ).scalars()
     return [serialize_entry(r, zone) for r in rows]
 
 
@@ -71,29 +72,29 @@ def update_entry(
     body: EntryEdit,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            UPDATE entries SET name = %s, calories = %s, protein_g = %s, note = %s
-            WHERE id = %s AND user_id = %s
-            RETURNING id, eaten_at, name, calories, protein_g, source, note
-            """,
-            (body.name, body.calories, body.protein_g, body.note, entry_id, user["id"]),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="找不到這筆記錄")
-    return serialize_entry(row, resolve_tz(tz))
+    entry = db.execute(
+        select(Entry).where(Entry.id == entry_id, Entry.user_id == user["id"])
+    ).scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="找不到這筆記錄")
+    entry.name = body.name
+    entry.calories = body.calories
+    entry.protein_g = body.protein_g
+    entry.note = body.note
+    db.flush()
+    return serialize_entry(entry, resolve_tz(tz))
 
 
 @router.delete("/{entry_id}")
-def delete_entry(entry_id: int, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "DELETE FROM entries WHERE id = %s AND user_id = %s RETURNING id",
-            (entry_id, user["id"]),
-        )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這筆記錄")
+def delete_entry(
+    entry_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    entry = db.execute(
+        select(Entry).where(Entry.id == entry_id, Entry.user_id == user["id"])
+    ).scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="找不到這筆記錄")
+    db.delete(entry)
     return {"ok": True}
