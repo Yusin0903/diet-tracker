@@ -1732,6 +1732,13 @@ function openExerciseForm() {
   const grid = $("ex-type-grid");
   grid.querySelectorAll(".ex-type-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      // 重訓走菜單流程:先挑(或先建立)一份菜單,套用時動作/組數/次數會
+      // 直接帶入,不再開一筆空白的重訓記錄要使用者從零手動加動作。
+      if (btn.dataset.type === "strength") {
+        closeModal();
+        openPlansList();
+        return;
+      }
       chosen = btn.dataset.type;
       grid.querySelectorAll(".ex-type-btn").forEach((b) => b.classList.toggle("active", b === btn));
       $("ex-distance-field").hidden = !EX_BY_KEY[chosen].hasDistance;
