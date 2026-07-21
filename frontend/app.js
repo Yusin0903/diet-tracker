@@ -1624,6 +1624,12 @@ function renderStrengthBody(e, movements) {
       <input id="mv-new-name" type="text" placeholder="新增動作,例如:槓鈴臥推" autocomplete="off" />
       <button class="pill-btn" id="mv-new-add">＋</button>
     </div>
+    ${movements.length ? `
+    <button class="pill-btn ghost" id="ex-save-plan" style="width:100%;justify-content:center;margin-top:14px">＋ 把今天這組存成菜單</button>
+    <div class="mv-add-row" id="save-plan-row" hidden>
+      <input id="save-plan-name" type="text" placeholder="菜單名稱,例如:上肢菜單" autocomplete="off" />
+      <button class="pill-btn" id="save-plan-go">儲存</button>
+    </div>` : ""}
     <button class="btn-danger" id="ex-del" style="margin-top:16px">刪除這筆記錄</button>`;
 
   const reload = async () => {
@@ -1698,6 +1704,30 @@ function renderStrengthBody(e, movements) {
       toast(err.message, true);
     }
   });
+
+  // 把今天已經記錄的動作/組數存成一份新菜單,下次直接套用(跟「使用菜單」互為反向)。
+  const savePlanBtn = $("ex-save-plan");
+  if (savePlanBtn) {
+    savePlanBtn.addEventListener("click", () => {
+      $("save-plan-row").hidden = false;
+      $("save-plan-name").focus();
+    });
+    $("save-plan-go").addEventListener("click", async () => {
+      const name = $("save-plan-name").value.trim();
+      if (!name) {
+        toast("請輸入菜單名稱", true);
+        return;
+      }
+      try {
+        await api(`/api/workout-plans/from-exercise/${e.id}`, { method: "POST", body: { name } });
+        toast(`已存成菜單「${name}」✓`);
+        $("save-plan-row").hidden = true;
+        $("save-plan-name").value = "";
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  }
 
   $("ex-del").addEventListener("click", async () => {
     if (!(await confirmDelete("確定要刪除這筆運動記錄嗎?"))) return;

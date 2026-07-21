@@ -1,7 +1,10 @@
 """訓練菜單:可重複套用的重訓範本(動作 + 目標組數/次數 + 可選出處連結)。
 
-使用菜單時(見 app.routers.exercises 的 /from-plan/{id})會把動作/組數/次數複製成
-當天的實際運動記錄,使用者只要調整每組的重量即可,不必每次重打一次菜單內容。
+雙向都支援:
+- 套用菜單到今天(見 app.routers.exercises 的 /from-plan/{id})會把動作/組數/次數
+  複製成當天的實際運動記錄,使用者只要調整每組的重量即可,不必每次重打一次。
+- 把今天已經記錄好的重訓存成新菜單(這裡的 /from-exercise/{id}),下次就能直接套用,
+  不用每次都手動重建同一份菜單。
 """
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -169,3 +172,52 @@ def delete_movement(movement_id: int, user: dict = Depends(current_user)):
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="找不到這個動作")
     return {"ok": True}
+
+
+@router.post("/from-exercise/{exercise_id}")
+def create_from_exercise(exercise_id: int, body: PlanIn, user: dict = Depends(current_user)):
+    """把一筆已經記錄的重訓(動作 + 組數)存成新菜單,下次直接套用不用重打一次。
+
+    每個動作的目標組數 = 該動作實際記了幾組;目標次數 = 第一組的次數
+    (菜單本來就只是抓大概的範本,精確數字每次套用時本來就會重新調整)。
+    """
+    with get_cursor() as cur:
+        cur.execute(
+            "SELECT id FROM exercises WHERE id = %s AND user_id = %s AND ex_type = 'strength'",
+            (exercise_id, user["id"]),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="找不到這筆重訓記錄")
+        cur.execute(
+            "SELECT id, name FROM exercise_movements WHERE exercise_id = %s ORDER BY sort_order, id",
+            (exercise_id,),
+        )
+        movements = cur.fetchall()
+        movement_sets = []
+        for m in movements:
+            cur.execute(
+                "SELECT reps FROM exercise_sets WHERE movement_id = %s ORDER BY set_order, id",
+                (m["id"],),
+            )
+            movement_sets.append((m["name"], cur.fetchall()))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO workout_plans (user_id, name, source_url) VALUES (%s, %s, %s) RETURNING id, name, source_url",
+            (user["id"], body.name, body.source_url),
+        )
+        plan = cur.fetchone()
+        for sort_order, (name, sets) in enumerate(movement_sets):
+            target_sets = len(sets) or 1
+            target_reps = sets[0]["reps"] if sets else 10
+            cur.execute(
+                """
+                INSERT INTO workout_plan_movements (plan_id, name, target_sets, target_reps, sort_order)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (plan["id"], name, target_sets, target_reps, sort_order),
+            )
+    return {
+        "id": plan["id"], "name": plan["name"], "source_url": plan["source_url"] or "",
+        "movements": _fetch_movements(plan["id"]),
+    }

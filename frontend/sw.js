@@ -7,7 +7,7 @@
 // see app/main.py) always pulls the matching fresh JS/CSS on the very next
 // load — even from a stuck OLD service worker that hasn't self-updated yet.
 // Bump VERSION here AND in index.html together on every frontend change.
-const VERSION = 31;
+const VERSION = 32;
 const CACHE = `diet-shell-v${VERSION}`;
 const SHELL = ["/", "/index.html", `/styles.css?v=${VERSION}`, `/app.js?v=${VERSION}`, "/manifest.json"];
 

@@ -484,3 +484,49 @@ def test_exercise_from_plan_copies_movements_and_sets(client):
     # 跨使用者隔離:別人的菜單匯不了
     tok2 = _register(client, "planuser2").json()["token"]
     assert client.post(f"/api/exercises/from-plan/{pid}", headers=_auth(tok2)).status_code == 404
+
+
+def test_workout_plan_from_exercise_saves_todays_workout(client):
+    tok = _register(client, "saver").json()["token"]
+    h = _auth(tok)
+
+    # 今天手動記一筆重訓,加兩個動作、各自不同組數/次數
+    ex = client.post("/api/exercises", headers=h, json={"ex_type": "strength"}).json()
+    eid = ex["id"]
+    mv1 = client.post(f"/api/exercises/{eid}/movements", headers=h, json={"name": "槓鈴臥推"}).json()
+    for reps in (12, 10, 8):
+        client.post(f"/api/exercises/movements/{mv1['id']}/sets", headers=h, json={"weight_kg": 40, "reps": reps})
+    mv2 = client.post(f"/api/exercises/{eid}/movements", headers=h, json={"name": "滑輪下拉"}).json()
+    for reps in (10, 10):
+        client.post(f"/api/exercises/movements/{mv2['id']}/sets", headers=h, json={"weight_kg": 30, "reps": reps})
+
+    # 存成新菜單
+    r = client.post(f"/api/workout-plans/from-exercise/{eid}", headers=h, json={"name": "今天練的"})
+    assert r.status_code == 200
+    plan = r.json()
+    assert plan["name"] == "今天練的"
+    movements = plan["movements"]
+    assert len(movements) == 2
+    assert movements[0]["name"] == "槓鈴臥推"
+    assert movements[0]["target_sets"] == 3   # 記了 3 組
+    assert movements[0]["target_reps"] == 12  # 第一組的次數
+    assert movements[1]["name"] == "滑輪下拉"
+    assert movements[1]["target_sets"] == 2
+    assert movements[1]["target_reps"] == 10
+
+    # 存好的菜單真的能查到、能再套用回今天
+    listed = client.get("/api/workout-plans", headers=h).json()
+    assert any(p["id"] == plan["id"] and p["movement_count"] == 2 for p in listed)
+    applied = client.post(f"/api/exercises/from-plan/{plan['id']}", headers=h).json()
+    assert len(applied["movements"][0]["sets"]) == 3
+    assert len(applied["movements"][1]["sets"]) == 2
+
+    # 非重訓類型不能存成菜單
+    yoga = client.post("/api/exercises", headers=h, json={"ex_type": "yoga"}).json()
+    bad = client.post(f"/api/workout-plans/from-exercise/{yoga['id']}", headers=h, json={"name": "x"})
+    assert bad.status_code == 404
+
+    # 跨使用者隔離:別人的重訓記錄存不了
+    tok2 = _register(client, "saver2").json()["token"]
+    denied = client.post(f"/api/workout-plans/from-exercise/{eid}", headers=_auth(tok2), json={"name": "x"})
+    assert denied.status_code == 404
