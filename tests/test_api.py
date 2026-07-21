@@ -20,16 +20,17 @@ def client():
     from app.settings import settings
     settings.invite_codes_raw = "testcode"  # 測試用邀請碼
     settings.secret_key = settings.secret_key or "test-secret-key"  # 啟動檢查需要
+    from sqlalchemy import text
     from fastapi.testclient import TestClient
     from app import db
     from app.main import app
 
     with TestClient(app) as c:
-        with db.get_cursor(commit=True) as cur:
-            cur.execute(
+        with db.get_engine().begin() as conn:
+            conn.execute(text(
                 "TRUNCATE users, entries, foods, profiles, recipes, "
                 "friendships, share_prefs, exercises, workout_plans RESTART IDENTITY CASCADE"
-            )
+            ))
         yield c
 
 

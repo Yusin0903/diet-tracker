@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.db import init_pool
+from app.db import init_engine
 from app.routers import (
     analyze, auth, entries, exercises, foods, friends, profile, recipes, stats, summary,
     workout_plans,
@@ -44,7 +44,7 @@ async def lifespan(_: FastAPI):
             "SECRET_KEY 尚未設定。請用 `openssl rand -hex 32` 產生一組,"
             "並以環境變數提供(正式環境務必設定且固定)。"
         )
-    init_pool()
+    init_engine()
     yield
 
 

@@ -7,217 +7,213 @@
   不用每次都手動重建同一份菜單。
 """
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-from app.db import get_cursor
+from app.db import get_db
+from app.models import Exercise, ExerciseMovement, ExerciseSet, WorkoutPlan, WorkoutPlanMovement
 from app.schemas import PlanIn, PlanMovementIn
 from app.security import current_user
 
 router = APIRouter(prefix="/api/workout-plans", tags=["workout-plans"])
 
 
-def _serialize_movement(m: dict) -> dict:
+def _serialize_movement(m: WorkoutPlanMovement) -> dict:
     return {
-        "id": m["id"], "name": m["name"],
-        "target_sets": m["target_sets"], "target_reps": m["target_reps"],
+        "id": m.id, "name": m.name,
+        "target_sets": m.target_sets, "target_reps": m.target_reps,
     }
 
 
-def _fetch_movements(plan_id: int) -> list:
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, name, target_sets, target_reps FROM workout_plan_movements
-            WHERE plan_id = %s ORDER BY sort_order, id
-            """,
-            (plan_id,),
-        )
-        return [_serialize_movement(m) for m in cur.fetchall()]
+def _fetch_movements(plan_id: int, db: Session) -> list:
+    rows = db.execute(
+        select(WorkoutPlanMovement)
+        .where(WorkoutPlanMovement.plan_id == plan_id)
+        .order_by(WorkoutPlanMovement.sort_order, WorkoutPlanMovement.id)
+    ).scalars()
+    return [_serialize_movement(m) for m in rows]
 
 
-def _require_owned_plan(plan_id: int, user_id: int) -> None:
-    with get_cursor() as cur:
-        cur.execute("SELECT 1 FROM workout_plans WHERE id = %s AND user_id = %s", (plan_id, user_id))
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這個菜單")
+def _require_owned_plan(plan_id: int, user_id: int, db: Session) -> WorkoutPlan:
+    plan = db.execute(
+        select(WorkoutPlan).where(WorkoutPlan.id == plan_id, WorkoutPlan.user_id == user_id)
+    ).scalar_one_or_none()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="找不到這個菜單")
+    return plan
 
 
 @router.get("")
-def list_plans(user: dict = Depends(current_user)):
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT p.id, p.name, p.source_url, COUNT(m.id) AS movement_count
-            FROM workout_plans p LEFT JOIN workout_plan_movements m ON m.plan_id = p.id
-            WHERE p.user_id = %s
-            GROUP BY p.id ORDER BY p.updated_at DESC
-            """,
-            (user["id"],),
-        )
-        rows = cur.fetchall()
+def list_plans(user: dict = Depends(current_user), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(WorkoutPlan, func.count(WorkoutPlanMovement.id))
+        .outerjoin(WorkoutPlanMovement, WorkoutPlanMovement.plan_id == WorkoutPlan.id)
+        .where(WorkoutPlan.user_id == user["id"])
+        .group_by(WorkoutPlan.id)
+        .order_by(WorkoutPlan.updated_at.desc())
+    ).all()
     return [
         {
-            "id": r["id"], "name": r["name"], "source_url": r["source_url"] or "",
-            "movement_count": r["movement_count"],
+            "id": p.id, "name": p.name, "source_url": p.source_url or "",
+            "movement_count": count,
         }
-        for r in rows
+        for p, count in rows
     ]
 
 
 @router.post("")
-def create_plan(body: PlanIn, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO workout_plans (user_id, name, source_url) VALUES (%s, %s, %s) RETURNING id, name, source_url",
-            (user["id"], body.name, body.source_url),
-        )
-        row = cur.fetchone()
-    return {"id": row["id"], "name": row["name"], "source_url": row["source_url"] or "", "movements": []}
+def create_plan(
+    body: PlanIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    plan = WorkoutPlan(user_id=user["id"], name=body.name, source_url=body.source_url)
+    db.add(plan)
+    db.flush()
+    return {"id": plan.id, "name": plan.name, "source_url": plan.source_url or "", "movements": []}
 
 
 @router.get("/{plan_id}")
-def get_plan(plan_id: int, user: dict = Depends(current_user)):
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT id, name, source_url FROM workout_plans WHERE id = %s AND user_id = %s",
-            (plan_id, user["id"]),
-        )
-        plan = cur.fetchone()
-    if plan is None:
-        raise HTTPException(status_code=404, detail="找不到這個菜單")
+def get_plan(
+    plan_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    plan = _require_owned_plan(plan_id, user["id"], db)
     return {
-        "id": plan["id"], "name": plan["name"], "source_url": plan["source_url"] or "",
-        "movements": _fetch_movements(plan_id),
+        "id": plan.id, "name": plan.name, "source_url": plan.source_url or "",
+        "movements": _fetch_movements(plan_id, db),
     }
 
 
 @router.put("/{plan_id}")
-def update_plan(plan_id: int, body: PlanIn, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            UPDATE workout_plans SET name = %s, source_url = %s, updated_at = now()
-            WHERE id = %s AND user_id = %s RETURNING id, name, source_url
-            """,
-            (body.name, body.source_url, plan_id, user["id"]),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="找不到這個菜單")
+def update_plan(
+    plan_id: int, body: PlanIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    plan = _require_owned_plan(plan_id, user["id"], db)
+    plan.name = body.name
+    plan.source_url = body.source_url
+    db.flush()
     return {
-        "id": row["id"], "name": row["name"], "source_url": row["source_url"] or "",
-        "movements": _fetch_movements(plan_id),
+        "id": plan.id, "name": plan.name, "source_url": plan.source_url or "",
+        "movements": _fetch_movements(plan_id, db),
     }
 
 
 @router.delete("/{plan_id}")
-def delete_plan(plan_id: int, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "DELETE FROM workout_plans WHERE id = %s AND user_id = %s RETURNING id", (plan_id, user["id"])
-        )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這個菜單")
+def delete_plan(
+    plan_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    plan = _require_owned_plan(plan_id, user["id"], db)
+    db.delete(plan)
     return {"ok": True}
 
 
 @router.post("/{plan_id}/movements")
-def add_movement(plan_id: int, body: PlanMovementIn, user: dict = Depends(current_user)):
-    _require_owned_plan(plan_id, user["id"])
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM workout_plan_movements WHERE plan_id = %s",
-            (plan_id,),
+def add_movement(
+    plan_id: int,
+    body: PlanMovementIn,
+    user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    _require_owned_plan(plan_id, user["id"], db)
+    next_order = db.execute(
+        select(func.coalesce(func.max(WorkoutPlanMovement.sort_order), -1) + 1).where(
+            WorkoutPlanMovement.plan_id == plan_id
         )
-        next_order = cur.fetchone()["next"]
-        cur.execute(
-            """
-            INSERT INTO workout_plan_movements (plan_id, name, target_sets, target_reps, sort_order)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id, name, target_sets, target_reps
-            """,
-            (plan_id, body.name, body.target_sets, body.target_reps, next_order),
-        )
-        row = cur.fetchone()
-    return _serialize_movement(row)
+    ).scalar_one()
+    movement = WorkoutPlanMovement(
+        plan_id=plan_id,
+        name=body.name,
+        target_sets=body.target_sets,
+        target_reps=body.target_reps,
+        sort_order=next_order,
+    )
+    db.add(movement)
+    db.flush()
+    return _serialize_movement(movement)
 
 
 @router.put("/movements/{movement_id}")
-def edit_movement(movement_id: int, body: PlanMovementIn, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            UPDATE workout_plan_movements m SET name = %s, target_sets = %s, target_reps = %s
-            FROM workout_plans p
-            WHERE m.id = %s AND m.plan_id = p.id AND p.user_id = %s
-            RETURNING m.id, m.name, m.target_sets, m.target_reps
-            """,
-            (body.name, body.target_sets, body.target_reps, movement_id, user["id"]),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="找不到這個動作")
-    return _serialize_movement(row)
+def edit_movement(
+    movement_id: int,
+    body: PlanMovementIn,
+    user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    movement = db.execute(
+        select(WorkoutPlanMovement)
+        .join(WorkoutPlan, WorkoutPlan.id == WorkoutPlanMovement.plan_id)
+        .where(WorkoutPlanMovement.id == movement_id, WorkoutPlan.user_id == user["id"])
+    ).scalar_one_or_none()
+    if movement is None:
+        raise HTTPException(status_code=404, detail="找不到這個動作")
+    movement.name = body.name
+    movement.target_sets = body.target_sets
+    movement.target_reps = body.target_reps
+    db.flush()
+    return _serialize_movement(movement)
 
 
 @router.delete("/movements/{movement_id}")
-def delete_movement(movement_id: int, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            DELETE FROM workout_plan_movements m USING workout_plans p
-            WHERE m.id = %s AND m.plan_id = p.id AND p.user_id = %s
-            RETURNING m.id
-            """,
-            (movement_id, user["id"]),
-        )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這個動作")
+def delete_movement(
+    movement_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    movement = db.execute(
+        select(WorkoutPlanMovement)
+        .join(WorkoutPlan, WorkoutPlan.id == WorkoutPlanMovement.plan_id)
+        .where(WorkoutPlanMovement.id == movement_id, WorkoutPlan.user_id == user["id"])
+    ).scalar_one_or_none()
+    if movement is None:
+        raise HTTPException(status_code=404, detail="找不到這個動作")
+    db.delete(movement)
     return {"ok": True}
 
 
 @router.post("/from-exercise/{exercise_id}")
-def create_from_exercise(exercise_id: int, body: PlanIn, user: dict = Depends(current_user)):
+def create_from_exercise(
+    exercise_id: int,
+    body: PlanIn,
+    user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     """把一筆已經記錄的重訓(動作 + 組數)存成新菜單,下次直接套用不用重打一次。
 
     每個動作的目標組數 = 該動作實際記了幾組;目標次數 = 第一組的次數
     (菜單本來就只是抓大概的範本,精確數字每次套用時本來就會重新調整)。
     """
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT id FROM exercises WHERE id = %s AND user_id = %s AND ex_type = 'strength'",
-            (exercise_id, user["id"]),
+    owned = db.execute(
+        select(Exercise.id).where(
+            Exercise.id == exercise_id, Exercise.user_id == user["id"], Exercise.ex_type == "strength"
         )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這筆重訓記錄")
-        cur.execute(
-            "SELECT id, name FROM exercise_movements WHERE exercise_id = %s ORDER BY sort_order, id",
-            (exercise_id,),
-        )
-        movements = cur.fetchall()
-        movement_sets = []
-        for m in movements:
-            cur.execute(
-                "SELECT reps FROM exercise_sets WHERE movement_id = %s ORDER BY set_order, id",
-                (m["id"],),
-            )
-            movement_sets.append((m["name"], cur.fetchall()))
+    ).first()
+    if owned is None:
+        raise HTTPException(status_code=404, detail="找不到這筆重訓記錄")
 
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO workout_plans (user_id, name, source_url) VALUES (%s, %s, %s) RETURNING id, name, source_url",
-            (user["id"], body.name, body.source_url),
-        )
-        plan = cur.fetchone()
-        for sort_order, (name, sets) in enumerate(movement_sets):
-            target_sets = len(sets) or 1
-            target_reps = sets[0]["reps"] if sets else 10
-            cur.execute(
-                """
-                INSERT INTO workout_plan_movements (plan_id, name, target_sets, target_reps, sort_order)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (plan["id"], name, target_sets, target_reps, sort_order),
+    movements = db.execute(
+        select(ExerciseMovement)
+        .where(ExerciseMovement.exercise_id == exercise_id)
+        .order_by(ExerciseMovement.sort_order, ExerciseMovement.id)
+    ).scalars()
+    movement_sets = []
+    for m in movements:
+        sets = db.execute(
+            select(ExerciseSet.reps)
+            .where(ExerciseSet.movement_id == m.id)
+            .order_by(ExerciseSet.set_order, ExerciseSet.id)
+        ).scalars().all()
+        movement_sets.append((m.name, sets))
+
+    plan = WorkoutPlan(user_id=user["id"], name=body.name, source_url=body.source_url)
+    db.add(plan)
+    db.flush()
+    for sort_order, (name, reps_list) in enumerate(movement_sets):
+        target_sets = len(reps_list) or 1
+        target_reps = reps_list[0] if reps_list else 10
+        db.add(
+            WorkoutPlanMovement(
+                plan_id=plan.id, name=name, target_sets=target_sets,
+                target_reps=target_reps, sort_order=sort_order,
             )
+        )
+    db.flush()
     return {
-        "id": plan["id"], "name": plan["name"], "source_url": plan["source_url"] or "",
-        "movements": _fetch_movements(plan["id"]),
+        "id": plan.id, "name": plan.name, "source_url": plan.source_url or "",
+        "movements": _fetch_movements(plan.id, db),
     }

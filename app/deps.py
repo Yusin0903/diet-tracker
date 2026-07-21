@@ -31,13 +31,13 @@ def day_bounds(date_str: str | None, tz: ZoneInfo) -> tuple[datetime, datetime, 
     return start, end, day.isoformat()
 
 
-def serialize_entry(r: dict, tz: ZoneInfo = TAIPEI) -> dict:
+def serialize_entry(e, tz: ZoneInfo = TAIPEI) -> dict:
     return {
-        "id": r["id"],
-        "eaten_at": r["eaten_at"].astimezone(tz).isoformat(),
-        "name": r["name"],
-        "calories": r["calories"],
-        "protein_g": float(r["protein_g"]),
-        "source": r["source"],
-        "note": r["note"],
+        "id": e.id,
+        "eaten_at": e.eaten_at.astimezone(tz).isoformat(),
+        "name": e.name,
+        "calories": e.calories,
+        "protein_g": float(e.protein_g),
+        "source": e.source,
+        "note": e.note,
     }

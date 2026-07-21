@@ -77,12 +77,12 @@ diet-tracker/
 ├── app/                      # FastAPI application package
 │   ├── main.py               # Assembles the app: lifespan, include routers, mount static
 │   ├── settings.py           # pydantic-settings config (env vars, seed foods)
-│   ├── db.py                 # Postgres connection pool, table init
+│   ├── db.py                 # SQLAlchemy engine/session, table init
 │   ├── security.py           # Password hashing, JWT, current_user dependency
 │   ├── rate_limit.py         # Per-IP rate limiter (brute-force protection)
 │   ├── deps.py               # Timezone resolve, day bounds, entry serialization
 │   ├── schemas.py            # Pydantic request models
-│   ├── sql/schema.sql        # users / profiles / entries / foods
+│   ├── models.py             # SQLAlchemy 2.0 ORM models (schema source of truth)
 │   ├── routers/              # One APIRouter per resource
 │   │   ├── auth.py           # /api/auth (register / login / me)
 │   │   ├── analyze.py        # /api/analyze

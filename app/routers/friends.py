@@ -7,9 +7,13 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import and_, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session, aliased
 
-from app.db import get_cursor
+from app.db import get_db
 from app.deps import day_bounds, resolve_tz, serialize_entry
+from app.models import Entry, Friendship, Recipe, SharePrefs, User
 from app.schemas import FriendRequestIn, SharePrefsIn
 from app.security import current_user
 from app.services.summary import day_summary, mascot_only
@@ -19,175 +23,168 @@ router = APIRouter(prefix="/api", tags=["friends"])
 DEFAULT_PREFS = {"share_mascot": True, "share_diet": False, "share_recipes": False}
 
 
-def _prefs(user_id: int) -> dict:
-    with get_cursor() as cur:
-        cur.execute(
-            "SELECT share_mascot, share_diet, share_recipes FROM share_prefs WHERE user_id = %s",
-            (user_id,),
-        )
-        r = cur.fetchone()
-    if not r:
+def _prefs(user_id: int, db: Session) -> dict:
+    p = db.get(SharePrefs, user_id)
+    if not p:
         return dict(DEFAULT_PREFS)
-    return {"share_mascot": r["share_mascot"], "share_diet": r["share_diet"], "share_recipes": r["share_recipes"]}
+    return {"share_mascot": p.share_mascot, "share_diet": p.share_diet, "share_recipes": p.share_recipes}
 
 
-def _are_friends(a: int, b: int) -> bool:
-    with get_cursor() as cur:
-        cur.execute(
-            """
-            SELECT 1 FROM friendships
-            WHERE status = 'accepted'
-              AND ((requester_id = %s AND addressee_id = %s)
-                OR (requester_id = %s AND addressee_id = %s))
-            """,
-            (a, b, b, a),
+def _are_friends(a: int, b: int, db: Session) -> bool:
+    found = db.execute(
+        select(Friendship.id).where(
+            Friendship.status == "accepted",
+            or_(
+                and_(Friendship.requester_id == a, Friendship.addressee_id == b),
+                and_(Friendship.requester_id == b, Friendship.addressee_id == a),
+            ),
         )
-        return cur.fetchone() is not None
+    ).first()
+    return found is not None
 
 
 # ---------- 分享權限 ----------
 @router.get("/share")
-def get_share(user: dict = Depends(current_user)):
-    return _prefs(user["id"])
+def get_share(user: dict = Depends(current_user), db: Session = Depends(get_db)):
+    return _prefs(user["id"], db)
 
 
 @router.put("/share")
-def set_share(body: SharePrefsIn, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            """
-            INSERT INTO share_prefs (user_id, share_mascot, share_diet, share_recipes)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE SET
-                share_mascot = EXCLUDED.share_mascot,
-                share_diet = EXCLUDED.share_diet,
-                share_recipes = EXCLUDED.share_recipes
-            """,
-            (user["id"], body.share_mascot, body.share_diet, body.share_recipes),
+def set_share(
+    body: SharePrefsIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    stmt = (
+        pg_insert(SharePrefs)
+        .values(
+            user_id=user["id"],
+            share_mascot=body.share_mascot,
+            share_diet=body.share_diet,
+            share_recipes=body.share_recipes,
         )
-    return _prefs(user["id"])
+        .on_conflict_do_update(
+            index_elements=[SharePrefs.user_id],
+            set_={
+                "share_mascot": body.share_mascot,
+                "share_diet": body.share_diet,
+                "share_recipes": body.share_recipes,
+            },
+        )
+    )
+    db.execute(stmt)
+    return _prefs(user["id"], db)
 
 
 # ---------- 好友清單 / 邀請 ----------
 @router.get("/friends")
-def list_friends(user: dict = Depends(current_user)):
+def list_friends(user: dict = Depends(current_user), db: Session = Depends(get_db)):
     me = user["id"]
-    with get_cursor() as cur:
-        # 已成為好友(雙向)
-        cur.execute(
-            """
-            SELECT f.id, f.requester_id, f.addressee_id,
-                   u_req.username AS req_name, u_add.username AS add_name
-            FROM friendships f
-            JOIN users u_req ON u_req.id = f.requester_id
-            JOIN users u_add ON u_add.id = f.addressee_id
-            WHERE f.status = 'accepted' AND (f.requester_id = %s OR f.addressee_id = %s)
-            ORDER BY f.created_at DESC
-            """,
-            (me, me),
-        )
-        friends = []
-        for r in cur.fetchall():
-            other_id = r["addressee_id"] if r["requester_id"] == me else r["requester_id"]
-            other_name = r["add_name"] if r["requester_id"] == me else r["req_name"]
-            p = _prefs(other_id)
-            friends.append({
-                "friendship_id": r["id"],
-                "user_id": other_id,
-                "username": other_name,
-                "shares": p,  # 對方分享了什麼,前端據此顯示
-            })
+    ReqUser = aliased(User)
+    AddUser = aliased(User)
 
-        # 別人寄給我的邀請(待我接受)
-        cur.execute(
-            """
-            SELECT f.id, u.username FROM friendships f
-            JOIN users u ON u.id = f.requester_id
-            WHERE f.addressee_id = %s AND f.status = 'pending'
-            ORDER BY f.created_at DESC
-            """,
-            (me,),
+    rows = db.execute(
+        select(Friendship, ReqUser.username, AddUser.username)
+        .join(ReqUser, ReqUser.id == Friendship.requester_id)
+        .join(AddUser, AddUser.id == Friendship.addressee_id)
+        .where(
+            Friendship.status == "accepted",
+            or_(Friendship.requester_id == me, Friendship.addressee_id == me),
         )
-        incoming = [{"friendship_id": r["id"], "username": r["username"]} for r in cur.fetchall()]
+        .order_by(Friendship.created_at.desc())
+    ).all()
+    friends = []
+    for f, req_name, add_name in rows:
+        other_id = f.addressee_id if f.requester_id == me else f.requester_id
+        other_name = add_name if f.requester_id == me else req_name
+        friends.append({
+            "friendship_id": f.id,
+            "user_id": other_id,
+            "username": other_name,
+            "shares": _prefs(other_id, db),  # 對方分享了什麼,前端據此顯示
+        })
 
-        # 我寄出、等待對方的邀請
-        cur.execute(
-            """
-            SELECT f.id, u.username FROM friendships f
-            JOIN users u ON u.id = f.addressee_id
-            WHERE f.requester_id = %s AND f.status = 'pending'
-            ORDER BY f.created_at DESC
-            """,
-            (me,),
-        )
-        outgoing = [{"friendship_id": r["id"], "username": r["username"]} for r in cur.fetchall()]
+    # 別人寄給我的邀請(待我接受)
+    incoming_rows = db.execute(
+        select(Friendship.id, User.username)
+        .join(User, User.id == Friendship.requester_id)
+        .where(Friendship.addressee_id == me, Friendship.status == "pending")
+        .order_by(Friendship.created_at.desc())
+    ).all()
+    incoming = [{"friendship_id": fid, "username": name} for fid, name in incoming_rows]
+
+    # 我寄出、等待對方的邀請
+    outgoing_rows = db.execute(
+        select(Friendship.id, User.username)
+        .join(User, User.id == Friendship.addressee_id)
+        .where(Friendship.requester_id == me, Friendship.status == "pending")
+        .order_by(Friendship.created_at.desc())
+    ).all()
+    outgoing = [{"friendship_id": fid, "username": name} for fid, name in outgoing_rows]
 
     return {"friends": friends, "incoming": incoming, "outgoing": outgoing}
 
 
 @router.post("/friends/request")
-def request_friend(body: FriendRequestIn, user: dict = Depends(current_user)):
+def request_friend(
+    body: FriendRequestIn, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
     me = user["id"]
     target = body.username.strip()
-    with get_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM users WHERE username = %s", (target,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="找不到這個帳號")
-        other = row["id"]
-        if other == me:
-            raise HTTPException(status_code=400, detail="不能加自己")
+    other_id = db.execute(select(User.id).where(User.username == target)).scalar_one_or_none()
+    if not other_id:
+        raise HTTPException(status_code=404, detail="找不到這個帳號")
+    if other_id == me:
+        raise HTTPException(status_code=400, detail="不能加自己")
 
-        # 對方已寄邀請給我 → 直接成為好友
-        cur.execute(
-            "SELECT id, status FROM friendships WHERE requester_id = %s AND addressee_id = %s",
-            (other, me),
-        )
-        rev = cur.fetchone()
-        if rev:
-            if rev["status"] != "accepted":
-                cur.execute("UPDATE friendships SET status = 'accepted' WHERE id = %s", (rev["id"],))
-            return {"status": "accepted"}
+    # 對方已寄邀請給我 → 直接成為好友
+    rev = db.execute(
+        select(Friendship).where(Friendship.requester_id == other_id, Friendship.addressee_id == me)
+    ).scalar_one_or_none()
+    if rev:
+        if rev.status != "accepted":
+            rev.status = "accepted"
+        return {"status": "accepted"}
 
-        # 我已寄過 / 已是好友
-        cur.execute(
-            "SELECT status FROM friendships WHERE requester_id = %s AND addressee_id = %s",
-            (me, other),
-        )
-        mine = cur.fetchone()
-        if mine:
-            return {"status": mine["status"]}
+    # 我已寄過 / 已是好友
+    mine_status = db.execute(
+        select(Friendship.status).where(Friendship.requester_id == me, Friendship.addressee_id == other_id)
+    ).scalar_one_or_none()
+    if mine_status:
+        return {"status": mine_status}
 
-        cur.execute(
-            "INSERT INTO friendships (requester_id, addressee_id, status) VALUES (%s, %s, 'pending')",
-            (me, other),
-        )
+    db.add(Friendship(requester_id=me, addressee_id=other_id, status="pending"))
     return {"status": "pending"}
 
 
 @router.post("/friends/{friendship_id}/accept")
-def accept_friend(friendship_id: int, user: dict = Depends(current_user)):
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "UPDATE friendships SET status = 'accepted' WHERE id = %s AND addressee_id = %s AND status = 'pending' RETURNING id",
-            (friendship_id, user["id"]),
+def accept_friend(
+    friendship_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
+    friendship = db.execute(
+        select(Friendship).where(
+            Friendship.id == friendship_id, Friendship.addressee_id == user["id"], Friendship.status == "pending"
         )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到這個邀請")
+    ).scalar_one_or_none()
+    if friendship is None:
+        raise HTTPException(status_code=404, detail="找不到這個邀請")
+    friendship.status = "accepted"
     return {"ok": True}
 
 
 @router.delete("/friends/{friendship_id}")
-def remove_friend(friendship_id: int, user: dict = Depends(current_user)):
+def remove_friend(
+    friendship_id: int, user: dict = Depends(current_user), db: Session = Depends(get_db)
+):
     """拒絕邀請或移除好友(任一方皆可)。"""
     me = user["id"]
-    with get_cursor(commit=True) as cur:
-        cur.execute(
-            "DELETE FROM friendships WHERE id = %s AND (requester_id = %s OR addressee_id = %s) RETURNING id",
-            (friendship_id, me, me),
+    friendship = db.execute(
+        select(Friendship).where(
+            Friendship.id == friendship_id,
+            or_(Friendship.requester_id == me, Friendship.addressee_id == me),
         )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="找不到")
+    ).scalar_one_or_none()
+    if friendship is None:
+        raise HTTPException(status_code=404, detail="找不到")
+    db.delete(friendship)
     return {"ok": True}
 
 
@@ -198,55 +195,45 @@ def friend_feed(
     date: Optional[str] = None,
     tz: Optional[str] = None,
     user: dict = Depends(current_user),
+    db: Session = Depends(get_db),
 ):
-    if not _are_friends(user["id"], friend_uid):
+    if not _are_friends(user["id"], friend_uid, db):
         raise HTTPException(status_code=403, detail="你們還不是好友")
 
-    with get_cursor() as cur:
-        cur.execute("SELECT username FROM users WHERE id = %s", (friend_uid,))
-        u = cur.fetchone()
-    if not u:
+    username = db.execute(select(User.username).where(User.id == friend_uid)).scalar_one_or_none()
+    if not username:
         raise HTTPException(status_code=404, detail="找不到使用者")
 
-    p = _prefs(friend_uid)
+    p = _prefs(friend_uid, db)
     zone = resolve_tz(tz)
     start, end, day_str = day_bounds(date, zone)
-    out = {"username": u["username"], "date": day_str, "shares": p}
+    out = {"username": username, "date": day_str, "shares": p}
 
     if p["share_diet"]:
-        ds = day_summary(friend_uid, start, end)
+        ds = day_summary(friend_uid, start, end, db)
         out["summary"] = ds
-        with get_cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, eaten_at, name, calories, protein_g, source, note
-                FROM entries WHERE user_id = %s AND eaten_at >= %s AND eaten_at < %s
-                ORDER BY eaten_at DESC
-                """,
-                (friend_uid, start, end),
-            )
-            out["entries"] = [serialize_entry(r, zone) for r in cur.fetchall()]
+        rows = db.execute(
+            select(Entry)
+            .where(Entry.user_id == friend_uid, Entry.eaten_at >= start, Entry.eaten_at < end)
+            .order_by(Entry.eaten_at.desc())
+        ).scalars()
+        out["entries"] = [serialize_entry(r, zone) for r in rows]
     elif p["share_mascot"]:
-        out["mascot"] = mascot_only(day_summary(friend_uid, start, end))
+        out["mascot"] = mascot_only(day_summary(friend_uid, start, end, db))
 
     if p["share_recipes"]:
-        with get_cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, name, servings, calories, protein_g, ingredients, steps, video_url
-                FROM recipes WHERE user_id = %s ORDER BY updated_at DESC
-                """,
-                (friend_uid,),
-            )
-            out["recipes"] = [
-                {
-                    "id": r["id"], "name": r["name"],
-                    "servings": float(r["servings"]) if r["servings"] is not None else None,
-                    "calories": r["calories"],
-                    "protein_g": float(r["protein_g"]) if r["protein_g"] is not None else None,
-                    "ingredients": r["ingredients"] or "", "steps": r["steps"] or "",
-                    "video_url": r["video_url"] or "",
-                }
-                for r in cur.fetchall()
-            ]
+        rows = db.execute(
+            select(Recipe).where(Recipe.user_id == friend_uid).order_by(Recipe.updated_at.desc())
+        ).scalars()
+        out["recipes"] = [
+            {
+                "id": r.id, "name": r.name,
+                "servings": float(r.servings) if r.servings is not None else None,
+                "calories": r.calories,
+                "protein_g": float(r.protein_g) if r.protein_g is not None else None,
+                "ingredients": r.ingredients or "", "steps": r.steps or "",
+                "video_url": r.video_url or "",
+            }
+            for r in rows
+        ]
     return out
