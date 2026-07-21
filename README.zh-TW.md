@@ -38,6 +38,38 @@
 
 > **NVIDIA_API_KEY 與邀請碼只放後端,從環境變數讀取,絕不進前端。**
 
+## 系統架構
+
+```mermaid
+flowchart TB
+    subgraph Client["📱 用戶端 — PWA"]
+        UI["index.html / app.js / styles.css"]
+        SW["Service Worker (sw.js)<br/>離線快取靜態外殼"]
+    end
+
+    subgraph Backend["🐍 FastAPI 後端"]
+        Routers["路由(Routers)<br/>auth · entries · foods · profile<br/>recipes · stats · summary<br/>friends · exercises · workout-plans · analyze"]
+        Services["服務層(Services)<br/>users · profile · targets<br/>exercise · summary · nvidia(視覺辨識)"]
+        Auth["JWT 認證 + 速率限制"]
+    end
+
+    DB[("🗄️ Postgres")]
+    NVIDIA["☁️ NVIDIA NIM API<br/>(視覺模型)"]
+    OFF["☁️ Open Food Facts<br/>(條碼查詢)"]
+
+    UI -->|"fetch /api/*<br/>帶 Bearer token"| Routers
+    UI -->|"條碼查詢<br/>(前端直打,不經後端)"| OFF
+    SW -.->|"靜態檔案<br/>cache-first"| UI
+    Routers --> Auth
+    Routers --> Services
+    Services --> DB
+    Services -->|"食物照片 →<br/>熱量/蛋白估算"| NVIDIA
+```
+
+- 前端是純靜態 PWA,直接由 FastAPI serve(不用另開前端 service);service worker 只快取靜態外殼(`index.html`/`app.js`/`styles.css`),絕對不快取 `/api/*`。
+- 掃條碼是**前端直接打 Open Food Facts**,完全繞過後端 —— 是整張圖裡唯一沒有經過後端轉發的部分。
+- 其他所有功能都走 FastAPI 路由 → 服務層 → Postgres 這條路徑,後端自己唯一會對外呼叫的只有視覺模型(分析食物照片)。
+
 ## 專案結構
 
 ```

@@ -38,6 +38,38 @@ The home mascot fills toward your TDEE and "overflows" when you go over; the tre
 
 > **`NVIDIA_API_KEY` and invite codes live only on the backend, read from env — they never reach the frontend.**
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client["📱 Client — PWA"]
+        UI["index.html / app.js / styles.css"]
+        SW["Service Worker (sw.js)<br/>offline shell cache"]
+    end
+
+    subgraph Backend["🐍 FastAPI backend"]
+        Routers["Routers<br/>auth · entries · foods · profile<br/>recipes · stats · summary<br/>friends · exercises · workout-plans · analyze"]
+        Services["Services<br/>users · profile · targets<br/>exercise · summary · nvidia (vision)"]
+        Auth["JWT auth + rate limiting"]
+    end
+
+    DB[("🗄️ Postgres")]
+    NVIDIA["☁️ NVIDIA NIM API<br/>(vision model)"]
+    OFF["☁️ Open Food Facts<br/>(barcode lookup)"]
+
+    UI -->|"fetch /api/*<br/>Bearer token"| Routers
+    UI -->|"barcode lookup<br/>(direct, no backend)"| OFF
+    SW -.->|"cache-first for<br/>static files"| UI
+    Routers --> Auth
+    Routers --> Services
+    Services --> DB
+    Services -->|"food photo →<br/>calories/protein estimate"| NVIDIA
+```
+
+- The frontend is a static PWA served directly by FastAPI (no separate frontend service) — the service worker only caches the static shell (`index.html`/`app.js`/`styles.css`), never `/api/*`.
+- The barcode scanner calls Open Food Facts **directly from the browser**, bypassing the backend entirely — it's the one thing on the diagram that isn't proxied.
+- Everything else goes through the FastAPI routers → services → Postgres, with the vision model (food photo analysis) as the only outbound call the backend itself makes.
+
 ## Project structure
 
 ```
